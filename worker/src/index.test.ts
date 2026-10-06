@@ -38,13 +38,16 @@ function d1(db: DatabaseSync): Database {
 }
 
 const ADMIN = 'codigo-admin'
+const RUN = 'codigo-execucao'
 const CODES = { dailyflow: 'codigo-dailyflow', 'markdown-viewer': 'codigo-mv' }
 let env: Env
 
 beforeEach(async () => {
   const sqlite = new DatabaseSync(':memory:')
-  sqlite.exec(readFileSync(new URL('../../migrations/0001_init.sql', import.meta.url), 'utf8'))
-  env = { DB: d1(sqlite), ADMIN_HASH: await sha256(ADMIN) }
+  for (const file of ['0001_init.sql', '0002_runs.sql']) {
+    sqlite.exec(readFileSync(new URL(`../../migrations/${file}`, import.meta.url), 'utf8'))
+  }
+  env = { DB: d1(sqlite), ADMIN_HASH: await sha256(ADMIN), RUN_HASH: await sha256(RUN) }
   for (const [id, code] of Object.entries(CODES)) {
     const res = await call('POST', '/v1/admin/apps', ADMIN, {
       id,
@@ -56,11 +59,15 @@ beforeEach(async () => {
   }
 })
 
-async function call(method: string, path: string, token: string, payload?: unknown) {
+async function call(method: string, path: string, token: string, payload?: unknown, runCode?: string) {
   const res = await handle(
     new Request('https://kit.test' + path, {
       method,
-      headers: { authorization: `Bearer ${token}`, 'x-device-id': 'mac-1' },
+      headers: {
+        authorization: `Bearer ${token}`,
+        'x-device-id': 'mac-1',
+        ...(runCode ? { 'x-run-code': runCode } : {}),
+      },
       body: payload === undefined ? undefined : JSON.stringify(payload),
     }),
     env,
@@ -182,5 +189,92 @@ describe("Claude's work and the 👍/👎", () => {
     expect(picked.data.notes.map((n: { id: number }) => n.id)).toEqual([1, 2])
     const one = await call('GET', '/v1/admin/apps/dailyflow/notes/2', ADMIN)
     expect(one.data.note.body).toBe('dois')
+  })
+})
+
+describe('remote runs', () => {
+  const runs = (path = '', method = 'GET', payload?: unknown, code = RUN) =>
+    call(method, `/v1/apps/dailyflow/runs${path}`, CODES.dailyflow, payload, code)
+  const poll = (payload: Record<string, unknown> = {}) =>
+    call('POST', '/v1/admin/agent/poll', ADMIN, { id: 'pc', name: 'PC de casa', apps: ['dailyflow'], ...payload })
+  const report = (id: number, payload: unknown) => call('POST', `/v1/admin/runs/${id}`, ADMIN, payload)
+
+  it('takes the owner run code on top of the app code', async () => {
+    expect((await runs('', 'GET', undefined, 'errado')).status).toBe(403)
+    expect((await runs()).status).toBe(200)
+    expect((await call('GET', '/v1/apps/dailyflow/runs', 'nada', undefined, RUN)).status).toBe(401)
+    delete env.RUN_HASH
+    expect((await runs()).data.error).toBe('runs disabled')
+  })
+
+  it('queues the open notes, one active run per app, and hands it to the agent once', async () => {
+    expect((await runs('', 'POST', {})).data.error).toBe('nothing to run')
+    await app('dailyflow').post({ body: 'um' })
+    await app('dailyflow').post({ body: 'dois' })
+    await app('dailyflow').post({ body: 'três' })
+    await app('dailyflow').claude(2, { status: 'in_progress', message: 'já nas mãos' })
+
+    const queued = await runs('', 'POST', { instructions: 'Sem deploy hoje' })
+    expect(queued.data.run).toMatchObject({ status: 'queued', notes: [1, 3], instructions: 'Sem deploy hoje' })
+    expect((await runs('', 'POST', {})).status).toBe(409)
+
+    // Paused or serving other apps: nothing taken, but seen online.
+    expect((await poll({ paused: true })).data.run).toBeNull()
+    expect((await poll({ apps: ['markdown-viewer'] })).data.run).toBeNull()
+    const listed = await runs()
+    expect(listed.data.agent).toMatchObject({ name: 'PC de casa', online: true, servesApp: false })
+
+    const taken = await poll()
+    expect(taken.data.run).toMatchObject({ id: queued.data.run.id, status: 'running', agent: 'pc' })
+    expect((await poll({ current: taken.data.run.id })).data.run).toBeNull()
+  })
+
+  it('records the report, and a cancel reaches the agent', async () => {
+    await app('dailyflow').post({ body: 'um' })
+    const { run } = (await runs('', 'POST', {})).data
+    await poll()
+    const progress = await report(run.id, { baseSha: 'aaa', messages: ['Lendo a nota'] })
+    expect(progress.data.status).toBe('running')
+    expect((await runs(`/${run.id}/cancel`, 'POST')).status).toBe(200)
+    const late = await report(run.id, { status: 'done', messages: ['Lendo a nota', 'Parei'] })
+    expect(late.data.status).toBe('canceled')
+    const [listed] = (await runs()).data.runs
+    expect(listed).toMatchObject({ status: 'canceled', baseSha: 'aaa', messages: ['Lendo a nota', 'Parei'] })
+  })
+
+  it('fails a run the agent lost by restarting', async () => {
+    await app('dailyflow').post({ body: 'um' })
+    const { run } = (await runs('', 'POST', {})).data
+    await poll()
+    await poll({ paused: true })
+    const [listed] = (await runs()).data.runs
+    expect(listed.id).toBe(run.id)
+    expect(listed.status).toBe('failed')
+  })
+
+  it('undoes a finished run once, and marks it undone', async () => {
+    await app('dailyflow').post({ body: 'um' })
+    const { run } = (await runs('', 'POST', {})).data
+    await poll()
+    expect((await runs(`/${run.id}/rollback`, 'POST')).status).toBe(409)
+    await report(run.id, {
+      status: 'done',
+      baseSha: 'aaa',
+      headSha: 'bbb',
+      commits: ['bbb', 'abc'],
+      summary: 'Feito',
+      stats: { costUsd: 0.42 },
+    })
+
+    const rollback = await runs(`/${run.id}/rollback`, 'POST')
+    expect(rollback.data.run).toMatchObject({ kind: 'rollback', targetRun: run.id, notes: [1] })
+    expect((await runs(`/${run.id}/rollback`, 'POST')).status).toBe(409)
+
+    const taken = await poll()
+    expect(taken.data.target).toMatchObject({ id: run.id, baseSha: 'aaa', headSha: 'bbb' })
+    await report(rollback.data.run.id, { status: 'done', summary: 'Revertido' })
+    const listed = (await runs()).data.runs
+    expect(listed.find((r: { id: number }) => r.id === run.id).rolledBackBy).toBe(rollback.data.run.id)
+    expect(listed[0].stats).toEqual({})
   })
 })

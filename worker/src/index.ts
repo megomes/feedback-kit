@@ -6,9 +6,11 @@
  * excluir só com a nota aberta, confirmar e reabrir só depois de entregue, e cada
  * mudança gravada no histórico com o contexto de onde foi feita.
  *
- * Duas portas:
+ * Três portas:
  * - `/v1/apps/:app/notes[/:n]`: a do widget, com o código de acesso do app.
- * - `/v1/admin/...`: a do Claude (o CLI), com o código de administração.
+ * - `/v1/apps/:app/runs[/:id/...]`: as execuções remotas, do widget também, com o código
+ *   do app e mais o código de execução (`x-run-code`), que só o Matheus tem.
+ * - `/v1/admin/...`: a do Claude (o CLI) e a do agente do PC, com o código de administração.
  *
  * O widget em si (`/v1/widget.js`) é um arquivo estático servido pelos assets do
  * Worker; nada aqui o toca.
@@ -30,6 +32,11 @@ export interface Env {
   DB: Database
   /** SHA-256, in hex, of the administration code the CLI sends as a bearer token. */
   ADMIN_HASH: string
+  /**
+   * SHA-256, in hex, of the code that may start, cancel and undo runs on the agent's
+   * computer. Unset: remote runs are off.
+   */
+  RUN_HASH?: string
   VERSION?: { id?: string; tag?: string }
 }
 
@@ -42,7 +49,7 @@ const MAX_CONTEXT = 16_000
 const CORS = {
   'access-control-allow-origin': '*',
   'access-control-allow-methods': 'GET, POST, PATCH, DELETE, OPTIONS',
-  'access-control-allow-headers': 'authorization, content-type, x-device-id',
+  'access-control-allow-headers': 'authorization, content-type, x-device-id, x-run-code',
   'access-control-max-age': '86400',
 }
 
@@ -345,6 +352,14 @@ async function appRoute(
 async function adminRoute(req: Request, env: Env, parts: string[]): Promise<Response> {
   if (!(await matches(req, env.ADMIN_HASH))) return json({ error: 'unauthorized' }, 401)
 
+  // The agent on the computer: POST /v1/admin/agent/poll · POST /v1/admin/runs/:id
+  if (parts.join('/') === 'agent/poll' && req.method === 'POST') return agentPoll(req, env)
+  if (parts[0] === 'runs' && parts.length === 2 && req.method === 'POST') {
+    const id = Number(parts[1])
+    if (!Number.isInteger(id) || id <= 0) return json({ error: 'invalid' }, 400)
+    return agentReport(req, env, id)
+  }
+
   // GET /v1/admin/apps · POST /v1/admin/apps
   if (parts.length === 1 && parts[0] === 'apps') {
     if (req.method === 'GET') {
@@ -442,6 +457,305 @@ async function adminRoute(req: Request, env: Env, parts: string[]): Promise<Resp
   return json({ error: 'not found' }, 404)
 }
 
+/* ------------------------------------------------------------- remote runs */
+
+/** An agent that asked for work this recently is online (it asks every ~20 s). */
+const ONLINE_MS = 120_000
+const MAX_INSTRUCTIONS = 2000
+const MAX_MESSAGES = 200
+
+interface RunRow {
+  id: number
+  app: string
+  kind: 'work' | 'rollback'
+  notes: string
+  instructions: string | null
+  target_run: number | null
+  status: string
+  agent: string | null
+  base_sha: string | null
+  head_sha: string | null
+  commits: string
+  messages: string
+  summary: string | null
+  error: string | null
+  stats: string
+  rolled_back_by: number | null
+  created_at: string
+  started_at: string | null
+  finished_at: string | null
+  updated_at: string
+}
+
+interface AgentRow {
+  id: string
+  name: string
+  apps: string
+  usage: string
+  version: string | null
+  last_seen: string
+}
+
+function parseRun(row: RunRow) {
+  return {
+    id: row.id,
+    app: row.app,
+    kind: row.kind,
+    notes: JSON.parse(row.notes) as number[],
+    instructions: row.instructions,
+    targetRun: row.target_run,
+    status: row.status,
+    agent: row.agent,
+    baseSha: row.base_sha,
+    headSha: row.head_sha,
+    commits: JSON.parse(row.commits) as string[],
+    messages: JSON.parse(row.messages) as string[],
+    summary: row.summary,
+    error: row.error,
+    stats: JSON.parse(row.stats) as Record<string, unknown>,
+    rolledBackBy: row.rolled_back_by,
+    createdAt: row.created_at,
+    startedAt: row.started_at,
+    finishedAt: row.finished_at,
+    updatedAt: row.updated_at,
+  }
+}
+
+function parseAgent(row: AgentRow, now = Date.now()) {
+  return {
+    id: row.id,
+    name: row.name,
+    apps: JSON.parse(row.apps) as string[],
+    usage: JSON.parse(row.usage) as Record<string, unknown>,
+    version: row.version,
+    lastSeen: row.last_seen,
+    online: now - Date.parse(row.last_seen) < ONLINE_MS,
+  }
+}
+
+const NOW = `strftime('%Y-%m-%dT%H:%M:%fZ', 'now')`
+const ACTIVE = `status in ('queued', 'running')`
+
+async function getRun(env: Env, app: string, id: number): Promise<RunRow | null> {
+  return env.DB.prepare(`select * from runs where app = ? and id = ?`).bind(app, id).first<RunRow>()
+}
+
+/** The run history of an app and the computer that would take a new one. */
+async function listRuns(env: Env, app: AppRow): Promise<Response> {
+  const [runs, agents, open] = await Promise.all([
+    env.DB.prepare(`select * from runs where app = ? order by id desc limit 20`).bind(app.id).all<RunRow>(),
+    // The computer serving this app; or, if none does, the last one seen, so the panel
+    // can say it is on but has no folder for this app.
+    env.DB.prepare(
+      `select a.* from agents a
+        order by exists (select 1 from json_each(a.apps) where value = ?) desc, a.last_seen desc limit 1`,
+    )
+      .bind(app.id)
+      .all<AgentRow>(),
+    env.DB.prepare(`select number from notes where app = ? and deleted = 0 and status = 'open' order by number`)
+      .bind(app.id)
+      .all<{ number: number }>(),
+  ])
+  const agent = agents.results[0]
+  return json({
+    runs: runs.results.map(parseRun),
+    agent: agent ? { ...parseAgent(agent), servesApp: (JSON.parse(agent.apps) as string[]).includes(app.id) } : null,
+    open: open.results.map((r) => r.number),
+  })
+}
+
+/** Queues the open notes (or the ones picked) for the agent. One active run per app. */
+async function queueRun(req: Request, env: Env, app: AppRow): Promise<Response> {
+  const input = (await body(req)) ?? {}
+  const picked = Array.isArray(input.notes)
+    ? input.notes.map(Number).filter((n) => Number.isInteger(n) && n > 0)
+    : []
+  const instructions =
+    input.instructions == null || input.instructions === ''
+      ? null
+      : typeof input.instructions === 'string' && input.instructions.length <= MAX_INSTRUCTIONS
+        ? input.instructions.trim()
+        : undefined
+  if (instructions === undefined) return json({ error: 'invalid' }, 400)
+
+  // Only open notes go (a 👎 reopens one): the rest is in someone's hands already.
+  const { results } = await env.DB.prepare(
+    `select number from notes where app = ? and deleted = 0 and status = 'open' order by number`,
+  )
+    .bind(app.id)
+    .all<{ number: number }>()
+  const open = results.map((r) => r.number)
+  const notes = picked.length ? picked.filter((n) => open.includes(n)) : open
+  if (!notes.length) return json({ error: 'nothing to run' }, 400)
+
+  const inserted = await env.DB.prepare(
+    `insert into runs (app, kind, notes, instructions)
+     select ?, 'work', ?, ? where not exists (select 1 from runs where app = ? and ${ACTIVE})
+     returning *`,
+  )
+    .bind(app.id, JSON.stringify(notes), instructions, app.id)
+    .first<RunRow>()
+  if (!inserted) return json({ error: 'busy' }, 409)
+  return json({ run: parseRun(inserted) })
+}
+
+/** Stops a run: a queued one never starts, a running one is killed at the next report. */
+async function cancelRun(env: Env, app: AppRow, id: number): Promise<Response> {
+  const { meta } = await env.DB.prepare(
+    `update runs set status = 'canceled', finished_at = coalesce(finished_at, ${NOW}), updated_at = ${NOW}
+      where app = ? and id = ? and ${ACTIVE}`,
+  )
+    .bind(app.id, id)
+    .run()
+  return meta.changes ? json({ ok: true }) : json({ error: 'not active' }, 409)
+}
+
+/** Queues the undoing of a run that changed the repository: `git revert` of its commits. */
+async function rollbackRun(env: Env, app: AppRow, id: number): Promise<Response> {
+  const target = await getRun(env, app.id, id)
+  if (!target) return json({ error: 'run not found' }, 404)
+  const changed = target.base_sha && target.head_sha && target.base_sha !== target.head_sha
+  if (target.kind !== 'work' || !changed || target.rolled_back_by || ['queued', 'running'].includes(target.status)) {
+    return json({ error: 'cannot roll back' }, 409)
+  }
+  const inserted = await env.DB.prepare(
+    `insert into runs (app, kind, notes, target_run)
+     select ?, 'rollback', ?, ?
+      where not exists (select 1 from runs where app = ? and ${ACTIVE})
+        and not exists (select 1 from runs where kind = 'rollback' and target_run = ? and status in ('queued', 'running', 'done'))
+     returning *`,
+  )
+    .bind(app.id, target.notes, target.id, app.id, target.id)
+    .first<RunRow>()
+  if (!inserted) return json({ error: 'busy' }, 409)
+  return json({ run: parseRun(inserted) })
+}
+
+async function runRoute(req: Request, env: Env, appId: string, rest: string[]): Promise<Response> {
+  const app = await findApp(env, appId)
+  if (!app || !(await matches(req, app.access_hash))) return json({ error: 'unauthorized' }, 401)
+  // The app's code lets anyone with the app write notes; running code on the computer
+  // takes the owner's own code on top of it.
+  const runCode = req.headers.get('x-run-code')?.trim() ?? ''
+  if (!env.RUN_HASH) return json({ error: 'runs disabled' }, 403)
+  if (!runCode || !same(await sha256(runCode), env.RUN_HASH.toLowerCase())) {
+    return json({ error: 'run code' }, 403)
+  }
+
+  if (rest.length === 0) {
+    if (req.method === 'GET') return listRuns(env, app)
+    if (req.method === 'POST') return queueRun(req, env, app)
+    return json({ error: 'method not allowed' }, 405)
+  }
+  const id = Number(rest[0])
+  if (!Number.isInteger(id) || id <= 0 || rest.length !== 2 || req.method !== 'POST') {
+    return json({ error: 'not found' }, 404)
+  }
+  if (rest[1] === 'cancel') return cancelRun(env, app, id)
+  if (rest[1] === 'rollback') return rollbackRun(env, app, id)
+  return json({ error: 'not found' }, 404)
+}
+
+/**
+ * POST /v1/admin/agent/poll { id, name, apps[], usage?, version?, paused?, current? }
+ *
+ * The agent's one call while idle: says it is alive (and how the Claude limits look),
+ * gives up any run it lost by restarting, and takes the oldest queued run of its apps.
+ */
+async function agentPoll(req: Request, env: Env): Promise<Response> {
+  const input = await body(req)
+  const id = short(input?.id, 64)
+  const name = short(input?.name, 100)
+  const apps = Array.isArray(input?.apps) ? input.apps.filter((a): a is string => typeof a === 'string') : null
+  if (!input || !id || !name || !apps) return json({ error: 'invalid' }, 400)
+  const usage = input.usage && typeof input.usage === 'object' ? clampContext(input.usage) : {}
+  const current = input.current == null ? null : Number(input.current)
+
+  await env.DB.batch([
+    env.DB.prepare(
+      `insert into agents (id, name, apps, usage, version, last_seen) values (?, ?, ?, ?, ?, ${NOW})
+       on conflict (id) do update set name = excluded.name, apps = excluded.apps, usage = excluded.usage,
+                                      version = excluded.version, last_seen = excluded.last_seen`,
+    ).bind(id, name, JSON.stringify(apps), JSON.stringify(usage), short(input.version, 32)),
+    // A run this agent holds but no longer works on died with the previous process.
+    env.DB.prepare(
+      `update runs set status = 'failed', error = 'O agente reiniciou no meio da execução.',
+                       finished_at = ${NOW}, updated_at = ${NOW}
+        where agent = ? and status = 'running' and id is not ?`,
+    ).bind(id, current),
+  ])
+
+  if (input.paused || current != null || !apps.length) return json({ run: null })
+  const claimed = await env.DB.prepare(
+    `update runs set status = 'running', agent = ?, started_at = ${NOW}, updated_at = ${NOW}
+      where id = (select id from runs where status = 'queued'
+                     and app in (select value from json_each(?)) order by id limit 1)
+        and status = 'queued'
+      returning *`,
+  )
+    .bind(id, JSON.stringify(apps))
+    .first<RunRow>()
+  if (!claimed) return json({ run: null })
+
+  const run = parseRun(claimed)
+  const target = claimed.target_run ? await getRun(env, claimed.app, claimed.target_run) : null
+  return json({ run, target: target ? parseRun(target) : null })
+}
+
+/**
+ * POST /v1/admin/runs/:id { status?, baseSha?, headSha?, commits?, messages?, summary?, error?, stats? }
+ *
+ * The agent's report, as the run goes and at its end. Answers the run's status, so the
+ * agent learns of a cancel and stops.
+ */
+async function agentReport(req: Request, env: Env, id: number): Promise<Response> {
+  const input = await body(req)
+  if (!input) return json({ error: 'invalid' }, 400)
+  const status = input.status == null ? null : String(input.status)
+  if (status !== null && !['running', 'done', 'failed'].includes(status)) return json({ error: 'invalid status' }, 400)
+  const strings = (value: unknown, max: number) =>
+    Array.isArray(value) ? JSON.stringify(value.filter((v) => typeof v === 'string').slice(-max)) : null
+  const text = (value: unknown, max: number) => (typeof value === 'string' ? value.slice(0, max) : null)
+  const stats = input.stats && typeof input.stats === 'object' ? JSON.stringify(clampContext(input.stats)) : null
+  const finishing = status === 'done' || status === 'failed'
+
+  const row = await env.DB.prepare(
+    `update runs set
+        status = case when status = 'running' and ? is not null then ? else status end,
+        base_sha = coalesce(?, base_sha), head_sha = coalesce(?, head_sha),
+        commits = coalesce(?, commits), messages = coalesce(?, messages),
+        summary = coalesce(?, summary), error = coalesce(?, error), stats = coalesce(?, stats),
+        finished_at = case when ? then coalesce(finished_at, ${NOW}) else finished_at end,
+        updated_at = ${NOW}
+      where id = ? returning *`,
+  )
+    .bind(
+      status,
+      status,
+      short(input.baseSha, 64),
+      short(input.headSha, 64),
+      strings(input.commits, 100),
+      strings(input.messages, MAX_MESSAGES),
+      text(input.summary, 20_000),
+      text(input.error, 5000),
+      stats,
+      finishing ? 1 : 0,
+      id,
+    )
+    .first<RunRow>()
+  if (!row) return json({ error: 'run not found' }, 404)
+  if (row.agent) {
+    await env.DB.prepare(`update agents set last_seen = ${NOW} where id = ?`).bind(row.agent).run()
+  }
+  // A rollback that went through marks the run it undid.
+  if (row.kind === 'rollback' && row.status === 'done' && row.target_run) {
+    await env.DB.prepare(`update runs set rolled_back_by = ?, updated_at = ${NOW} where id = ?`)
+      .bind(row.id, row.target_run)
+      .run()
+  }
+  return json({ status: row.status })
+}
+
 export async function handle(req: Request, env: Env): Promise<Response> {
   if (req.method === 'OPTIONS') return new Response(null, { status: 204, headers: CORS })
   const url = new URL(req.url)
@@ -449,6 +763,9 @@ export async function handle(req: Request, env: Env): Promise<Response> {
   if (parts[0] !== 'v1') return json({ error: 'not found' }, 404)
 
   if (parts[1] === 'admin') return adminRoute(req, env, parts.slice(2))
+
+  // /v1/apps/:app/runs[/:id/cancel|rollback]
+  if (parts[1] === 'apps' && parts[2] && parts[3] === 'runs') return runRoute(req, env, parts[2], parts.slice(4))
 
   // /v1/apps/:app/notes[/:n]
   if (parts[1] === 'apps' && parts[2] && parts[3] === 'notes' && parts.length <= 5) {

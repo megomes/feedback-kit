@@ -67,11 +67,21 @@ node $F 3 ignored "Motivo…" '{"summary":"…","ignored":["…"],"decisions":["
   `deployed` e diga ao Matheus qual versão saiu. Sem isso a entrega não está completa.
 - Mudanças relevantes de escopo também vão para a spec do projeto.
 
+## Execução remota (sem ninguém por perto)
+
+Quando a variável `FEEDBACK_KIT_RUN` existe, você foi chamado pelo agente do PC
+(`agent/`), a pedido do Matheus pelo painel, e ninguém vai ler perguntas até o fim. Não
+pergunte nem espere confirmação: decida o que é técnico; o que é decisão dele (produto,
+dinheiro, destrutivo) vai para `discussing` com a pergunta e as opções, e você segue. A
+última mensagem é o relatório que ele lê no celular. O agente cuida de `git pull`, do
+`git push` final, do registro dos commits e do desfazer.
+
 ## Integrar o painel num app novo
 
 1. Cadastrar o app (gera o código de acesso em `~/.feedback-kit/codes/<id>.txt`):
    `node ~/Code/feedback-kit/cli/feedback.mjs apps add <id> "<Nome>" https://github.com/megomes/<repo>`
-2. Criar `feedback-kit.json` na raiz do projeto: `{ "app": "<id>" }`.
+2. Criar `feedback-kit.json` na raiz do projeto: `{ "app": "<id>" }` (com
+   `"deploy": "<comando>"` se publicar não é automático no push: o desfazer remoto usa).
 3. Carregar o script e pôr o elemento onde o painel deve aparecer (veja o README do kit
    para React, Next e Tauri):
 

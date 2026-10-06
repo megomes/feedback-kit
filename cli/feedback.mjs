@@ -12,6 +12,10 @@
  *   feedback 3 done "Implementado e publicado" '{"summary":"…","done":["…"],"commits":["abc1234"],"deployed":"v1.2.0"}'
  *   feedback 3 ignored "Motivo…" '{"summary":"…","ignored":["…"],"decisions":["…"]}'
  *
+ *   feedback run-code | npx wrangler secret put RUN_HASH
+ *                                          gera o código de execução remota (o painel pede
+ *                                          uma vez por aparelho) e imprime o hash dele
+ *
  *   feedback apps                           os apps cadastrados
  *   feedback apps add <id> "<nome>" [repo] [--code <arquivo>]
  *                                          cadastra um app (ou troca o código de um);
@@ -86,7 +90,18 @@ const ids = (list) => {
 
 const args = process.argv.slice(2)
 
-if (args[0] === 'apps') {
+if (args[0] === 'run-code') {
+  // The owner's code for remote runs: kept here, its hash goes to the Worker's RUN_HASH.
+  const file = join(HOME, 'run-code.txt')
+  if (!existsSync(file) || args.includes('--new')) {
+    mkdirSync(HOME, { recursive: true })
+    writeFileSync(file, randomBytes(24).toString('base64url'))
+    console.error(`Código de execução novo em ${file}`)
+  } else {
+    console.error(`Usando o código de ${file} (--new para trocar)`)
+  }
+  process.stdout.write(createHash('sha256').update(readFileSync(file, 'utf8').trim()).digest('hex'))
+} else if (args[0] === 'apps') {
   if (args[1] === 'add') {
     // --code <file>: keep a code the app's devices already have, instead of a new one.
     const flag = args.indexOf('--code')

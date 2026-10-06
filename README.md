@@ -5,13 +5,14 @@ cada app, o Claude trabalha neles e registra exatamente o que fez, e ele confirm
 reabre com 👎. Nasceu da tela Notes do DailyFlow e da tela Feedback do markdown-viewer, que
 eram cópias uma da outra e já tinham divergido.
 
-Três peças, e cada uma se atualiza num lugar só:
+Quatro peças, e cada uma se atualiza num lugar só:
 
 | Peça | O que é | Como chega aos apps |
 | --- | --- | --- |
 | **Worker + D1** (`worker/`, `migrations/`) | A API e o banco, para todos os apps | `npm run deploy` |
 | **Widget** (`widget/`) | O `<feedback-panel>`, um Web Component | Os apps carregam `/v1/widget.js` do Worker ao abrir: o deploy chega a todos em até 5 minutos, sem rebuild |
 | **Skill + CLI** (`skill/`, `cli/`) | As regras da fila e a ferramenta do Claude | `git pull` aqui; a skill instalada só aponta para este repositório |
+| **Agente** (`agent/`) | Roda no PC: executa no Claude Code o que o painel pede, de qualquer lugar | `git pull` aqui; o ícone da bandeja religa o agente |
 
 Produção: `https://feedback-kit.megomes.workers.dev` (a raiz é uma página de demonstração).
 
@@ -97,10 +98,103 @@ node cli/feedback.mjs apps   # os apps cadastrados
 
 O resto (ler, atualizar, entregar) está em [skill/SKILL.md](skill/SKILL.md).
 
+## Rodar no computador, do celular
+
+O painel tem um botão **Rodar N notas**: ele põe as notas abertas numa fila no Worker, o
+agente no PC (ligado com o Windows, no ícone da bandeja) pega, roda o Claude Code headless
+na pasta do projeto e devolve tudo ao painel enquanto trabalha: o que o Claude vai
+dizendo, o relatório final, os commits, o custo e os tokens. As notas mudam de status
+pelo caminho, como sempre. Cada execução pode ser **cancelada** e, depois de terminada,
+**desfeita** (`git revert` dos commits dela, push, o `deploy` do projeto e as notas de
+volta para abertas; isso roda sem o Claude, não gasta nada).
+
+```
+celular ── POST /runs ──▶ Worker (D1: runs, agents) ◀── consulta a cada 20 s ── agente no PC
+   ▲                                                                              │
+   └──────── o painel lê o progresso a cada 4 s ◀── relatórios ── claude -p ◀─────┘
+```
+
+**Parado, não gasta nada do Claude.** A consulta do agente é um HTTP ao Worker (cerca de
+4 mil por dia, longe do limite gratuito). O Claude Code só abre quando há execução, e fecha
+ao terminar. No plano Pro/Max, uma execução consome a janela de 5 horas como uma sessão
+normal; o custo que aparece (`≈ US$`) é o equivalente na API, para comparar execuções.
+Com chave de API, é o que de fato se paga.
+
+**O limite do Claude.** O Claude Code informa o uso das janelas de 5 horas e semanal a
+cada execução; o agente guarda e o painel mostra (com quando cada uma volta). Acima de
+`maxFiveHour` (90%), o agente não começa execução nova: ela espera na fila até a janela
+virar.
+
+**Sem ninguém por perto.** O prompt da execução diz ao Claude para não perguntar: nota
+ambígua ou que pede decisão do Matheus vai para `discussing` com a pergunta, e ele segue
+para a próxima. O agente só começa com a pasta limpa (`git status` sem mudanças), faz
+`git pull --ff-only` antes e garante o `git push` depois.
+
+### Ligar (uma vez)
+
+1. No Worker, o código de execução (o painel pede uma vez por aparelho; é o mesmo para
+   todos os apps):
+
+   ```bash
+   node cli/feedback.mjs run-code | npx wrangler secret put RUN_HASH
+   npm run deploy      # aplica a migração 0002 e publica o painel novo
+   ```
+
+2. No PC com Windows (Node 22+, Git, Claude Code instalado e logado, e o
+   `~/.feedback-kit/admin-code.txt`):
+
+   ```powershell
+   git clone https://github.com/megomes/feedback-kit $HOME\Code\feedback-kit
+   cd $HOME\Code\feedback-kit; npm ci
+   powershell -ExecutionPolicy Bypass -File agent\install-windows.ps1
+   ```
+
+   Ele instala a skill, cria `~/.feedback-kit/agent.json`, lista os projetos que achou, põe
+   o atalho em Inicializar e liga o ícone.
+
+3. No celular, no painel de qualquer app: **Rodar no computador…** e cole o conteúdo de
+   `~/.feedback-kit/run-code.txt`.
+
+Em macOS ou Linux, o mesmo agente roda com `npm run agent` (sem o ícone; ponha num
+launchd/systemd ou num `pm2`).
+
+### Projetos e configuração
+
+O agente acha os projetos sozinho: toda pasta com `feedback-kit.json` dentro das `roots`
+(até dois níveis). O comando de publicar usado pelo desfazer vai no mesmo arquivo:
+
+```json
+{ "app": "dailyflow", "deploy": "npm run deploy" }
+```
+
+`~/.feedback-kit/agent.json`:
+
+| Chave | Padrão | |
+| --- | --- | --- |
+| `name` | o nome do PC | como ele aparece no painel |
+| `roots` | `["~/Code"]` | onde procurar projetos |
+| `projects` | `{}` | `{ "<app>": "<pasta>" }`, à mão, vence a busca |
+| `model` | `null` | `--model` do Claude Code (`null` = o padrão da conta) |
+| `maxBudgetUsd` | `5` | `--max-budget-usd` por execução: corta uma execução que dispara |
+| `timeoutMinutes` | `45` | depois disso, para |
+| `permissionMode` | `bypassPermissions` | ninguém aprova ferramentas; `auto` é mais cuidadoso e pode parar no meio |
+| `maxFiveHour` | `0.9` | não começa execução nova com a janela de 5 h acima disso |
+
+`node agent/agent.mjs projects` lista o que ele achou. Cada execução guarda a saída inteira
+do Claude Code em `~/.feedback-kit/runs/<id>.jsonl`, e o log fica em
+`~/.feedback-kit/agent.log` (o ícone abre os dois).
+
+**Segurança.** O código do app só escreve notas; rodar, cancelar e desfazer pedem também o
+código de execução. Mesmo assim, o texto das notas vira instrução para um Claude com
+permissão total no PC: só cadastre num app quem você deixaria mexer no código.
+
 ## Códigos
 
 - **Administração:** o CLI manda o código de `~/.feedback-kit/admin-code.txt`; o Worker
   guarda só o SHA-256, no secret `ADMIN_HASH`.
+- **Execução remota:** `~/.feedback-kit/run-code.txt`; o Worker guarda o SHA-256 no
+  secret `RUN_HASH` (sem ele, o botão nem aparece). Trocar:
+  `node cli/feedback.mjs run-code --new | npx wrangler secret put RUN_HASH`.
 - **Por app:** `node cli/feedback.mjs apps add <id> "<Nome>" [repo]` gera um código novo,
   grava em `~/.feedback-kit/codes/<id>.txt` e guarda o hash no banco. Ele é colado uma vez
   em cada aparelho, no próprio painel (ou o app passa em `accessCode`).

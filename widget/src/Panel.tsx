@@ -23,6 +23,7 @@ import {
   X,
 } from 'lucide-preact'
 import { collectContext, deviceId, summarizeContext, type ClientContext } from './context'
+import { Runs } from './Runs'
 import { MESSAGES, type Filter, type Kind, type Lang, type Messages, type Status } from './i18n'
 
 interface LogEntry {
@@ -288,6 +289,18 @@ export function Panel({ cfg }: { cfg: PanelConfig }) {
       ) : (
         <>
           {!showArchived && <Composer m={m} onAdd={add} />}
+          {!showArchived && (
+            <Runs
+              m={m}
+              api={cfg.api}
+              app={cfg.app}
+              accessCode={readCode(cfg)}
+              repo={app?.repo ?? null}
+              locale={m.locale}
+              onLink={cfg.onLink}
+              onNotesChanged={reload}
+            />
+          )}
 
           <div class="row wrap toolbar">
             {showArchived ? (
