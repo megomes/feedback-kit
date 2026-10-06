@@ -1,0 +1,247 @@
+/*
+ * The panel's look. It lives in the element's shadow root, so nothing here leaks into
+ * the app and nothing of the app leaks in, except one thing on purpose: the `--fb-*`
+ * custom properties, which are the contract with the host.
+ *
+ * Every token has a default (the dark and light sets below, from the design system of
+ * markdown-viewer: cards on a near-black frame, indigo and coral). A host maps its own
+ * tokens onto them with a rule on the element, which wins over these defaults:
+ *
+ *   feedback-panel { --fb-bg: var(--bg-content); --fb-accent: var(--accent); }
+ *
+ * For finer changes the pieces are exposed as parts: page, card, note, composer,
+ * resolution, pill, chip, input, button, button-primary, filters.
+ *
+ * Changing a token's name or meaning breaks hosts: that is a /v2/ change.
+ */
+
+:host {
+  /* ---- light (the default when nothing says otherwise) */
+  --fb-bg: #ffffff;
+  --fb-surface: #fafafd;
+  --fb-surface-hover: #f0f0f7;
+  --fb-surface-active: #e9e9f3;
+  --fb-input: #ffffff;
+  --fb-border: #dcdce8;
+  --fb-border-subtle: #e7e7f0;
+  --fb-border-strong: #c5c5d6;
+  --fb-text: #12121a;
+  --fb-text-secondary: #4d4d5e;
+  --fb-text-muted: #7b7b8e;
+  --fb-focus: #5552e6;
+  --fb-primary-bg: #12121a;
+  --fb-primary-text: #ffffff;
+  --fb-danger: #c42a2d;
+  --fb-positive: #1f8f52;
+  --fb-warning: #b5651d;
+  --fb-claude: #6b3fa0;
+  --fb-blue: #2f6ab8;
+  --fb-purple: #6b3fa0;
+  --fb-cyan: #17797a;
+  --fb-yellow: #8a6a15;
+  --fb-red: #b3382f;
+  --fb-teal: #17797a;
+  --fb-gray: #7b7b8e;
+  --fb-tint-bg: 15%;
+  --fb-tint-border: 34%;
+  --fb-tint-text: 80%;
+
+  --fb-radius-sm: 6px;
+  --fb-radius-md: 8px;
+  --fb-radius-lg: 12px;
+  --fb-font: 'Inter Variable', Inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --fb-font-mono: 'JetBrains Mono Variable', 'SF Mono', ui-monospace, Menlo, Consolas, monospace;
+  --fb-font-size: 14px;
+  --fb-max-width: 920px;
+  --fb-padding: 26px 32px 60px;
+
+  display: block;
+  height: 100%;
+  overflow: auto;
+  background: var(--fb-bg);
+  color: var(--fb-text);
+  font: 400 var(--fb-font-size) / 1.45 var(--fb-font);
+  color-scheme: light;
+}
+
+/* ---- dark: asked for, or the system's when the host says nothing */
+:host([theme='dark']) {
+  --fb-bg: #0a0a14;
+  --fb-surface: #11111e;
+  --fb-surface-hover: #1b1b30;
+  --fb-surface-active: #1f1f37;
+  --fb-input: #0e0e1a;
+  --fb-border: #262639;
+  --fb-border-subtle: #1b1b2b;
+  --fb-border-strong: #363650;
+  --fb-text: #f4f4f8;
+  --fb-text-secondary: #a7a7b9;
+  --fb-text-muted: #6e6e82;
+  --fb-focus: #6b68f5;
+  --fb-primary-bg: #f4f4f8;
+  --fb-primary-text: #0b0b12;
+  --fb-danger: #ff6668;
+  --fb-positive: #34d27b;
+  --fb-warning: #e09a5f;
+  --fb-claude: #b39ae8;
+  --fb-blue: #7f9fe0;
+  --fb-purple: #b39ae8;
+  --fb-cyan: #5fbfbd;
+  --fb-yellow: #ddc06a;
+  --fb-red: #e08080;
+  --fb-teal: #5fbfbd;
+  --fb-gray: #777487;
+  --fb-tint-bg: 22%;
+  --fb-tint-border: 46%;
+  --fb-tint-text: 52%;
+  color-scheme: dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :host(:not([theme='light']):not([theme='dark'])) {
+    --fb-bg: #0a0a14;
+    --fb-surface: #11111e;
+    --fb-surface-hover: #1b1b30;
+    --fb-surface-active: #1f1f37;
+    --fb-input: #0e0e1a;
+    --fb-border: #262639;
+    --fb-border-subtle: #1b1b2b;
+    --fb-border-strong: #363650;
+    --fb-text: #f4f4f8;
+    --fb-text-secondary: #a7a7b9;
+    --fb-text-muted: #6e6e82;
+    --fb-focus: #6b68f5;
+    --fb-primary-bg: #f4f4f8;
+    --fb-primary-text: #0b0b12;
+    --fb-danger: #ff6668;
+    --fb-positive: #34d27b;
+    --fb-warning: #e09a5f;
+    --fb-claude: #b39ae8;
+    --fb-blue: #7f9fe0;
+    --fb-purple: #b39ae8;
+    --fb-cyan: #5fbfbd;
+    --fb-yellow: #ddc06a;
+    --fb-red: #e08080;
+    --fb-teal: #5fbfbd;
+    --fb-gray: #777487;
+    --fb-tint-bg: 22%;
+    --fb-tint-border: 46%;
+    --fb-tint-text: 52%;
+    color-scheme: dark;
+  }
+}
+
+:host([hidden]) { display: none; }
+
+[data-color='blue'] { --c: var(--fb-blue); }
+[data-color='purple'] { --c: var(--fb-purple); }
+[data-color='green'] { --c: var(--fb-positive); }
+[data-color='cyan'] { --c: var(--fb-cyan); }
+[data-color='yellow'] { --c: var(--fb-yellow); }
+[data-color='red'] { --c: var(--fb-red); }
+[data-color='teal'] { --c: var(--fb-teal); }
+[data-color='gray'] { --c: var(--fb-gray); }
+
+*, *::before, *::after { box-sizing: border-box; }
+button, input, textarea { font: inherit; color: inherit; }
+a { color: inherit; text-decoration: none; }
+:focus-visible { outline: 2px solid var(--fb-focus); outline-offset: 2px; border-radius: var(--fb-radius-sm); }
+.muted { color: var(--fb-text-muted); }
+.tabular { font-variant-numeric: tabular-nums; }
+svg { flex: none; }
+.flush { margin: 0; }
+
+.page { padding: var(--fb-padding); width: 100%; max-width: var(--fb-max-width); margin: 0 auto; }
+.page-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.page-head > div { flex: 1; min-width: 0; }
+.page-head h1 { margin: 0; font-size: 24px; font-weight: 680; letter-spacing: -.02em; line-height: 1.15; }
+.page-head .sub { color: var(--fb-text-muted); font-size: 13px; margin-top: 3px; }
+.row { display: flex; align-items: center; gap: 8px; }
+.row.wrap { flex-wrap: wrap; }
+.spacer { flex: 1; }
+.toolbar { margin: 18px 0 10px; }
+
+/* ── Controls ── */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 7px; height: 34px; padding: 0 12px; border-radius: var(--fb-radius-md); background: var(--fb-surface); border: 1px solid var(--fb-border); color: var(--fb-text); font-weight: 500; font-size: 13px; cursor: pointer; transition: background-color 120ms ease, border-color 120ms ease, color 120ms ease, opacity 120ms ease; white-space: nowrap; }
+.btn:hover { background: var(--fb-surface-hover); border-color: var(--fb-border-strong); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.sm { height: 28px; padding: 0 9px; font-size: 12.5px; gap: 5px; }
+.btn.ghost { background: transparent; border-color: transparent; color: var(--fb-text-secondary); }
+.btn.ghost:hover { background: var(--fb-surface-hover); color: var(--fb-text); }
+.btn.primary { background: var(--fb-primary-bg); color: var(--fb-primary-text); border-color: transparent; font-weight: 600; }
+.btn.primary:hover { opacity: .9; }
+.btn.danger { color: var(--fb-danger); }
+.input { height: 34px; width: 100%; background: var(--fb-input); border: 1px solid var(--fb-border); border-radius: var(--fb-radius-md); padding: 0 10px; color: var(--fb-text); outline: 0; transition: border-color 120ms ease; }
+.input::placeholder { color: var(--fb-text-muted); }
+.input:focus { border-color: var(--fb-focus); }
+textarea.input { height: auto; min-height: 60px; padding: 8px 10px; resize: vertical; }
+.seg { display: inline-flex; gap: 2px; padding: 2px; background: var(--fb-surface); border: 1px solid var(--fb-border); border-radius: var(--fb-radius-md); max-width: 100%; overflow-x: auto; scrollbar-width: none; }
+.seg::-webkit-scrollbar { display: none; }
+.seg button { height: 28px; padding: 0 12px; border: 0; border-radius: calc(var(--fb-radius-md) - 2px); background: transparent; color: var(--fb-text-muted); font-weight: 500; font-size: 13px; cursor: pointer; white-space: nowrap; }
+.seg button:hover { color: var(--fb-text); }
+.seg button[aria-pressed='true'] { background: var(--fb-surface-active); color: var(--fb-text); }
+.card { background: var(--fb-surface); border: 1px solid var(--fb-border); border-radius: var(--fb-radius-lg); padding: 14px; }
+.label { font-size: 11px; font-weight: 600; letter-spacing: .06em; text-transform: uppercase; color: var(--fb-text-muted); }
+.chip { display: inline-flex; align-items: center; gap: 6px; height: 26px; padding: 0 9px; border-radius: var(--fb-radius-sm); border: 1px solid var(--fb-border); background: var(--fb-surface); font-size: 12.5px; cursor: pointer; color: var(--fb-text-secondary); }
+.chip:hover { border-color: var(--fb-border-strong); color: var(--fb-text); }
+.chip[aria-pressed='true'] { border-color: var(--fb-focus); color: var(--fb-text); background: var(--fb-surface-active); }
+.dot { width: 8px; height: 8px; border-radius: 2px; background: var(--c); flex: none; }
+.hint { font-size: 12px; color: var(--fb-text-muted); }
+.mono { font-family: var(--fb-font-mono); font-size: 11.5px; }
+.error { color: var(--fb-danger); font-size: 13px; }
+
+/* ── Notes ── */
+.composer { display: flex; flex-direction: column; gap: 10px; }
+.composer textarea, .note-edit textarea { min-height: 76px; line-height: 1.5; }
+.notes { display: flex; flex-direction: column; gap: 10px; }
+.note { display: flex; flex-direction: column; gap: 10px; scroll-margin-top: 20px; }
+.note.pending { opacity: .7; border-style: dashed; }
+.note.s-done, .note.s-ignored { background: color-mix(in srgb, var(--fb-surface) 70%, var(--fb-bg)); }
+.note.s-in_progress { border-color: color-mix(in srgb, var(--fb-blue) 45%, var(--fb-border)); }
+.note-head { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.note-id { font-size: 13px; font-weight: 700; color: var(--fb-text); }
+.pill { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: 5px; font-size: 11.5px; font-weight: 500; white-space: nowrap;
+  background: color-mix(in srgb, var(--c) var(--fb-tint-bg), var(--fb-surface)); border: 1px solid color-mix(in srgb, var(--c) var(--fb-tint-border), var(--fb-surface));
+  color: color-mix(in srgb, var(--c) var(--fb-tint-text), var(--fb-text)); }
+.note-body { margin: 0; white-space: pre-wrap; word-break: break-word; font-size: 14px; line-height: 1.55; }
+.note.s-done .note-body, .note.s-ignored .note-body { color: var(--fb-text-secondary); }
+.note-edit { display: flex; flex-direction: column; gap: 8px; }
+.resolution { display: flex; flex-direction: column; gap: 10px; padding: 10px 12px; border-radius: var(--fb-radius-md); background: var(--fb-bg); border: 1px solid var(--fb-border-subtle); box-shadow: inset 3px 0 0 var(--fb-positive); }
+.note.s-ignored .resolution { box-shadow: inset 3px 0 0 var(--fb-gray); }
+.res-block { display: flex; flex-direction: column; gap: 3px; }
+.res-block p { margin: 0; font-size: 13.5px; }
+.res-block ul { margin: 0; padding-left: 18px; font-size: 13.5px; color: var(--fb-text-secondary); display: flex; flex-direction: column; gap: 2px; }
+.res-meta .chip { height: 24px; font-size: 11.5px; }
+.note-log summary { list-style: none; display: flex; align-items: center; gap: 6px; font-size: 12px; color: var(--fb-text-muted); cursor: pointer; flex-wrap: wrap; }
+.note-log summary::-webkit-details-marker { display: none; }
+.note-log summary svg { transition: transform 150ms ease; }
+.note-log[open] summary svg { transform: rotate(90deg); }
+.note-log summary .hint { margin-left: auto; }
+.note-log ol { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 4px; font-size: 12.5px; }
+.note-log li { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
+.actor { font-size: 11px; font-weight: 600; padding: 0 5px; border-radius: 4px; background: var(--fb-surface-active); }
+.actor.a-claude { background: color-mix(in srgb, var(--fb-claude) 22%, var(--fb-surface)); color: color-mix(in srgb, var(--fb-claude) 60%, var(--fb-text)); }
+.log-prev { color: var(--fb-text-muted); font-style: italic; flex-basis: 100%; padding-left: 20px; white-space: pre-wrap; }
+.note-device { display: flex; align-items: center; gap: 6px; margin-top: -4px; font-size: 12px; }
+.debug { margin-top: 8px; }
+.debug summary { font-size: 12px; color: var(--fb-text-muted); cursor: pointer; }
+.debug pre { margin: 6px 0 0; padding: 10px; border-radius: var(--fb-radius-md); background: var(--fb-bg); border: 1px solid var(--fb-border-subtle); font-size: 11px; color: var(--fb-text-secondary); max-height: 320px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+@media (pointer: coarse) { .shortcut { display: none; } }
+.verify { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding-top: 10px; border-top: 1px solid var(--fb-border-subtle); }
+.verify .reject { display: flex; flex-direction: column; gap: 8px; width: 100%; }
+.thumb.up:hover { color: var(--fb-positive); border-color: color-mix(in srgb, var(--fb-positive) 50%, var(--fb-border)); }
+.thumb.down:hover { color: var(--fb-danger); border-color: color-mix(in srgb, var(--fb-danger) 50%, var(--fb-border)); }
+.note.s-archived { background: color-mix(in srgb, var(--fb-surface) 60%, var(--fb-bg)); }
+.note.s-archived .note-body { color: var(--fb-text-secondary); }
+
+/* The conversation stays under the note (DailyFlow's note #35). */
+.thread { display: flex; flex-direction: column; gap: 8px; }
+.thread-divider { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; color: var(--fb-text-muted); }
+.thread-divider::after { content: ''; flex: 1; height: 1px; background: var(--fb-border-subtle); }
+.thread-divider.user { color: var(--fb-warning); }
+.thread-divider.claude { color: var(--fb-positive); }
+.thread-item .note-body { margin: 4px 0 0; }
+
+@media (max-width: 600px) {
+  :host { --fb-padding: 18px 16px 48px; }
+}

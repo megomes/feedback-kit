@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>feedback-kit</title>
+    <style>
+      :root { color-scheme: light dark; }
+      body { margin: 0; height: 100vh; display: grid; grid-template-rows: auto 1fr; font: 14px system-ui, sans-serif; background: #050508; color: #ddd; }
+      header { display: flex; gap: 12px; align-items: center; padding: 10px 16px; }
+      header code { color: #9a98ff; }
+      /* A host that maps its own tokens: try ?mapped */
+      body.mapped feedback-panel {
+        --fb-bg: #101826;
+        --fb-surface: #16213a;
+        --fb-border: #24345a;
+        --fb-focus: #4f8cff;
+        --fb-primary-bg: #4f8cff;
+        --fb-primary-text: #fff;
+        --fb-radius-lg: 16px;
+      }
+    </style>
+    <script type="module" src="./v1/widget.js"></script>
+  </head>
+  <body>
+    <header>
+      <b>feedback-kit</b>
+      <span>app <code id="app"></code></span>
+      <span>?app=&lt;id&gt; · ?theme=light|dark · ?lang=en · ?mapped</span>
+    </header>
+    <feedback-panel id="panel" closable></feedback-panel>
+    <script type="module">
+      const q = new URLSearchParams(location.search)
+      const panel = document.getElementById('panel')
+      const app = q.get('app') || 'demo'
+      document.getElementById('app').textContent = app
+      for (const name of ['theme', 'lang']) if (q.get(name)) panel.setAttribute(name, q.get(name))
+      if (q.has('mapped')) document.body.classList.add('mapped')
+      panel.setAttribute('screen', 'demo')
+      panel.appContext = () => ({ version: 'demo', stage: 'demo' })
+      panel.setAttribute('app', app)
+      panel.addEventListener('feedback-close', () => (panel.hidden = true))
+    </script>
+  </body>
+</html>

@@ -1,0 +1,22 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "feedback-kit",
+  "main": "worker/src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "workers_dev": true,
+  "preview_urls": false,
+  // The widget: dist/v1/widget.js, built by `npm run build`. A request that matches no
+  // file falls through to the Worker, which answers the API.
+  "assets": { "directory": "dist" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "feedback-kit",
+      "database_id": "316faefa-a3df-41c0-9651-e72b723389dc",
+      "migrations_dir": "migrations",
+    },
+  ],
+  // Which build answered: lands in every note's server context.
+  "version_metadata": { "binding": "VERSION" },
+  // ADMIN_HASH (secret): SHA-256 em hex do código de administração. Ver README.md.
+}
