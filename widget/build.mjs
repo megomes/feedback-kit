@@ -9,7 +9,7 @@
  * `/v1/` is the contract: anything that would break a host (a token renamed, an
  * attribute that changes meaning) goes to `/v2/`, and v1 stays as it was.
  */
-import { build } from 'esbuild'
+import { build, transform } from 'esbuild'
 import { copyFileSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 
 const { version } = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'))
@@ -26,7 +26,18 @@ await build({
   sourcemap: false,
   jsx: 'automatic',
   jsxImportSource: 'preact',
-  loader: { '.css': 'text' },
+  // The CSS goes in as a string for the shadow root, minified like the rest.
+  plugins: [
+    {
+      name: 'css-text',
+      setup(b) {
+        b.onLoad({ filter: /\.css$/ }, async (args) => {
+          const { code } = await transform(readFileSync(args.path, 'utf8'), { loader: 'css', minify: true })
+          return { contents: code, loader: 'text' }
+        })
+      },
+    },
+  ],
   define: { KIT_VERSION: JSON.stringify(version) },
   legalComments: 'none',
   logLevel: 'info',

@@ -1,7 +1,7 @@
 {
   "name": "feedback-kit",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "description": "Feedback unificado dos apps do Matheus: um Worker com D1, um Web Component e a fila de trabalho do Claude.",
   "scripts": {

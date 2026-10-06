@@ -13,7 +13,9 @@
  *   feedback 3 ignored "Motivo…" '{"summary":"…","ignored":["…"],"decisions":["…"]}'
  *
  *   feedback apps                           os apps cadastrados
- *   feedback apps add <id> "<nome>" [repo]  cadastra um app (ou troca o código de um)
+ *   feedback apps add <id> "<nome>" [repo] [--code <arquivo>]
+ *                                          cadastra um app (ou troca o código de um);
+ *                                          --code mantém um código que já existe
  *
  * O app vem de `--app <id>` ou do `feedback-kit.json` ({ "app": "<id>" }) mais próximo,
  * subindo a partir da pasta atual. Status aceitos: discussing, in_progress, done,
@@ -86,9 +88,13 @@ const args = process.argv.slice(2)
 
 if (args[0] === 'apps') {
   if (args[1] === 'add') {
+    // --code <file>: keep a code the app's devices already have, instead of a new one.
+    const flag = args.indexOf('--code')
+    const kept = flag >= 0 ? readFileSync(args[flag + 1], 'utf8').trim() : null
+    if (flag >= 0) args.splice(flag, 2)
     const [, , id, name, repo] = args
-    if (!id || !name) fail('uso: feedback apps add <id> "<nome>" [repo]')
-    const code = randomBytes(32).toString('base64url')
+    if (!id || !name) fail('uso: feedback apps add <id> "<nome>" [repo] [--code <arquivo>]')
+    const code = kept || randomBytes(32).toString('base64url')
     await call('POST', '/apps', {
       id,
       name,
