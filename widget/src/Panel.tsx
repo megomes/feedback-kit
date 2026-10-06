@@ -20,6 +20,7 @@ import {
   ThumbsDown,
   ThumbsUp,
   Trash2,
+  Undo2,
   X,
 } from 'lucide-preact'
 import { collectContext, deviceId, summarizeContext, type ClientContext } from './context'
@@ -531,7 +532,9 @@ function NoteCard({
   const thread = note.log.filter(
     (l) =>
       l.action === 'rejected' ||
-      (l.action === 'status' && (l.detail?.status === 'done' || l.detail?.status === 'ignored')),
+      (l.action === 'status' && (l.detail?.status === 'done' || l.detail?.status === 'ignored')) ||
+      // Claude sending a note back to open: a remote run undone or canceled.
+      (l.actor === 'claude' && l.action === 'status' && l.detail?.status === 'open'),
   )
   const open = note.status === 'open'
   const hasResolution = !!(
@@ -677,6 +680,14 @@ function NoteCard({
                   {m.thread.rejected} · {when(l.ts)}
                 </div>
                 <p class="note-body">{l.message}</p>
+              </div>
+            ) : l.detail?.status === 'open' ? (
+              <div key={i} class="thread-item">
+                <div class="thread-divider user">
+                  <Undo2 size={12} />
+                  {m.thread.undone} · {when(l.ts)}
+                </div>
+                {l.message && <p class="note-body hint">{l.message}</p>}
               </div>
             ) : (
               <div key={i} class="thread-divider claude">

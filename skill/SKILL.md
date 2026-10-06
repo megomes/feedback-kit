@@ -74,7 +74,8 @@ Quando a variável `FEEDBACK_KIT_RUN` existe, você foi chamado pelo agente do P
 pergunte nem espere confirmação: decida o que é técnico; o que é decisão dele (produto,
 dinheiro, destrutivo) vai para `discussing` com a pergunta e as opções, e você segue. A
 última mensagem é o relatório que ele lê no celular. O agente cuida de `git pull`, do
-`git push` final, do registro dos commits e do desfazer.
+`git push` final, do registro dos commits e do desfazer; por isso nada de `git reset`,
+`--amend` ou rebase: errou, faça um commit novo.
 
 ## Integrar o painel num app novo
 

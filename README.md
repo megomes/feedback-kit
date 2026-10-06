@@ -106,7 +106,17 @@ na pasta do projeto e devolve tudo ao painel enquanto trabalha: o que o Claude v
 dizendo, o relatório final, os commits, o custo e os tokens. As notas mudam de status
 pelo caminho, como sempre. Cada execução pode ser **cancelada** e, depois de terminada,
 **desfeita** (`git revert` dos commits dela, push, o `deploy` do projeto e as notas de
-volta para abertas; isso roda sem o Claude, não gasta nada).
+volta para abertas, sem a entrega antiga; isso roda sem o Claude, não gasta nada).
+
+**Qual Claude.** Bugs vão no Sonnet, ideias, UX e perguntas no Opus, os dois em esforço
+médio (`models` na configuração do agente). Uma execução com os dois tipos roda duas
+sessões seguidas, bugs primeiro.
+
+**Cancelar não publica.** Uma execução cancelada (ou que passou do tempo) não faz mais
+push: os commits que ela ainda não tinha enviado ficam só no PC, na branch
+`feedback-kit/parada-<id>`, as mudanças soltas vão para o `git stash`, e as notas que
+estavam no meio voltam para abertas. O que o Claude já tinha enviado antes do cancelar
+continua no ar e pode ser desfeito como qualquer execução.
 
 ```
 celular ── POST /runs ──▶ Worker (D1: runs, agents) ◀── consulta a cada 20 s ── agente no PC
@@ -174,7 +184,7 @@ O agente acha os projetos sozinho: toda pasta com `feedback-kit.json` dentro das
 | `name` | o nome do PC | como ele aparece no painel |
 | `roots` | `["~/Code"]` | onde procurar projetos |
 | `projects` | `{}` | `{ "<app>": "<pasta>" }`, à mão, vence a busca |
-| `model` | `null` | `--model` do Claude Code (`null` = o padrão da conta) |
+| `models` | bug: `sonnet`/`medium`; o resto: `opus`/`medium` | `--model` e `--effort` por tipo de nota (`bug`, `idea`, `ux`, `question`; `default` para os não listados). Notas de modelos diferentes na mesma execução viram sessões em sequência, bugs primeiro |
 | `maxBudgetUsd` | `5` | `--max-budget-usd` por execução: corta uma execução que dispara |
 | `timeoutMinutes` | `45` | depois disso, para |
 | `permissionMode` | `bypassPermissions` | ninguém aprova ferramentas; `auto` é mais cuidadoso e pode parar no meio |

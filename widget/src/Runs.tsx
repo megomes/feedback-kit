@@ -208,7 +208,13 @@ export function Runs({
 
   return (
     <section class="card runs" part="card runs">
-      <AgentLine m={m} agent={state?.agent ?? null} locale={locale} loaded={!!state} />
+      <AgentLine
+        m={m}
+        agent={state?.agent ?? null}
+        working={runs.find((x) => x.status === 'running')?.id ?? null}
+        locale={locale}
+        loaded={!!state}
+      />
       <Launcher
         m={m}
         open={state?.open ?? []}
@@ -282,7 +288,20 @@ function RunCodeForm({
 
 const pct = (x?: number) => `${Math.round((x ?? 0) * 100)}%`
 
-function AgentLine({ m, agent, locale, loaded }: { m: Messages; agent: Agent | null; locale: string; loaded: boolean }) {
+function AgentLine({
+  m,
+  agent,
+  working,
+  locale,
+  loaded,
+}: {
+  m: Messages
+  agent: Agent | null
+  /** The run the computer is on now: while it works, it does not poll, so "ready" would be stale. */
+  working: number | null
+  locale: string
+  loaded: boolean
+}) {
   const r = m.runs
   if (!loaded) return <div class="hint">{r.loading}</div>
   if (!agent) return <div class="agent-line hint">{r.noAgent}</div>
@@ -291,12 +310,14 @@ function AgentLine({ m, agent, locale, loaded }: { m: Messages; agent: Agent | n
     ? 'offline'
     : !agent.servesApp
       ? 'noFolder'
-      : u.paused
+      : working != null
+        ? 'working'
+        : u.paused
         ? 'paused'
         : u.limitedBy
           ? 'limited'
           : 'online'
-  const color = { online: 'green', offline: 'gray', noFolder: 'yellow', paused: 'yellow', limited: 'red' }[state]
+  const color = { online: 'green', working: 'blue', offline: 'gray', noFolder: 'yellow', paused: 'yellow', limited: 'red' }[state]
   const time = (epoch?: number) =>
     epoch ? new Date(epoch * 1000).toLocaleTimeString(locale, { hour: '2-digit', minute: '2-digit' }) : ''
   const day = (epoch?: number) =>
@@ -307,7 +328,7 @@ function AgentLine({ m, agent, locale, loaded }: { m: Messages; agent: Agent | n
         <span class="dot" data-color={color} />
         <span class="agent-name">{agent.name}</span>
         <span class="hint">
-          {r.agentState[state]}
+          {state === 'working' && working != null ? r.working(working) : r.agentState[state]}
           {state === 'offline' ? ` · ${r.lastSeen(new Date(agent.lastSeen).toLocaleString(locale))}` : ''}
           {state === 'limited' && u.limitedBy ? ` · ${u.limitedBy}` : ''}
         </span>
