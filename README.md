@@ -1,66 +1,111 @@
-# feedback-kit
+<div align="center">
 
-O feedback de todos os apps do Matheus, num lugar só: ele escreve comentários dentro de
-cada app, o Claude trabalha neles e registra exatamente o que fez, e ele confirma com 👍 ou
-reabre com 👎. Nasceu da tela Notes do DailyFlow e da tela Feedback do markdown-viewer, que
-eram cópias uma da outra e já tinham divergido.
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset=".github/assets/banner-dark.png">
+  <source media="(prefers-color-scheme: light)" srcset=".github/assets/banner-light.png">
+  <img alt="feedback-kit: write feedback inside any app, Claude works on it and records exactly what it did" src=".github/assets/banner-dark.png" width="100%">
+</picture>
 
-Quatro peças, e cada uma se atualiza num lugar só:
+<br>
 
-| Peça | O que é | Como chega aos apps |
-| --- | --- | --- |
-| **Worker + D1** (`worker/`, `migrations/`) | A API e o banco, para todos os apps | `npm run deploy` |
-| **Widget** (`widget/`) | O `<feedback-panel>`, um Web Component | Os apps carregam `/v1/widget.js` do Worker ao abrir: o deploy chega a todos em até 5 minutos, sem rebuild |
-| **Skill + CLI** (`skill/`, `cli/`) | As regras da fila e a ferramenta do Claude | `git pull` aqui; a skill instalada só aponta para este repositório |
-| **Agente** (`agent/`) | Roda no PC: executa no Claude Code o que o painel pede, de qualquer lugar | `git pull` aqui; o ícone da bandeja religa o agente |
+<img src="https://skillicons.dev/icons?i=cloudflare,ts,preact,nodejs,electron" alt="Cloudflare, TypeScript, Preact, Node.js, Electron">
 
-Produção: `https://feedback-kit.megomes.workers.dev` (a raiz é uma página de demonstração).
+<br><br>
 
-## Usar num app
+**One feedback queue for all your apps.** You write notes inside each app, Claude works on
+them and records exactly what it did, and you confirm with 👍 or reopen with 👎.
+
+[Pieces](#pieces) · [Use it in an app](#use-it-in-an-app) · [Theming](#theming) · [Run from your phone](#run-it-on-your-computer-from-your-phone) · [Deploy](#deploy-your-own)
+
+</div>
+
+<br>
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/panel-dark.png" alt="The feedback panel with notes by type and status, and the computer ready to run them"></td>
+    <td width="50%"><img src=".github/assets/delivered-dark.png" alt="A note delivered by Claude, with what was done, the commits and the deployed version"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>The queue</b> · bugs, ideas, UX and questions, numbered per app</td>
+    <td align="center"><b>Delivered</b> · what was done, commits, version, and your 👍/👎</td>
+  </tr>
+</table>
+
+<details>
+<summary><b>Light theme</b></summary>
+<br>
+<img src=".github/assets/panel-light.png" alt="The feedback panel in the light theme" width="100%">
+</details>
+
+<sub>Screenshots use a fictional "Recipe Box" app on a local Worker with a throwaway database.</sub>
+
+## Why
+
+Every app I build ended up with its own "notes" screen, and they kept drifting apart. The
+kit replaces them with one Worker, one database and one Web Component, and turns the
+notes into a work queue that Claude Code can pick up, resolve and report on.
+
+## Pieces
+
+Four pieces, each updated in one place only:
+
+| Piece                                     | What it is                                                     | How it reaches the apps                                                                  |
+| ----------------------------------------- | -------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Worker + D1** (`worker/`, `migrations/`) | The API and the database, shared by every app                   | `npm run deploy`                                                                         |
+| **Widget** (`widget/`)                    | `<feedback-panel>`, a Web Component (Preact, shadow DOM)       | Apps load `/v1/widget.js` from the Worker, so a deploy reaches all of them, no rebuild   |
+| **Skill + CLI** (`skill/`, `cli/`)        | The queue rules and Claude's tool                               | `git pull` here; the installed skill only points to this repository                     |
+| **Agent** (`agent/`)                      | Runs on your computer and executes in Claude Code what the panel asks | `git pull` here; the tray icon restarts it                                         |
+
+## Use it in an app
 
 ```html
-<script type="module" src="https://feedback-kit.megomes.workers.dev/v1/widget.js"></script>
-<feedback-panel app="dailyflow" screen="today" lang="pt" closable></feedback-panel>
+<script type="module" src="https://<your-worker>.workers.dev/v1/widget.js"></script>
+<feedback-panel app="recipes" screen="home" lang="en" closable></feedback-panel>
 ```
 
-| Atributo | |
-| --- | --- |
-| `app` | o id do app no kit (obrigatório) |
-| `screen` | de onde o painel foi aberto; vai com cada nota (nunca um caminho de arquivo) |
-| `lang` | `pt` ou `en` (padrão: o do navegador) |
-| `theme` | `light` ou `dark` (padrão: o do sistema). Quem mapeia os próprios tokens pode omitir |
-| `closable` | mostra o X e fecha no Esc; o app escuta `feedback-close` |
-| `api` | outro Worker (desenvolvimento local); por padrão, o de onde o script veio |
+| Attribute  | Meaning                                                                                    |
+| ---------- | ------------------------------------------------------------------------------------------ |
+| `app`      | The app id in the kit (required)                                                           |
+| `screen`   | Where the panel was opened from; saved with each note (never a file path)                  |
+| `lang`     | `pt` or `en` (default: the browser's)                                                      |
+| `theme`    | `light` or `dark` (default: the system's). Hosts that map their own tokens can omit it     |
+| `closable` | Shows the X and closes on Esc; the app listens to `feedback-close`                         |
+| `api`      | Another Worker (local development); by default, the one the script came from               |
 
-| Propriedade | |
-| --- | --- |
-| `appContext` | objeto, ou função que devolve um: o estado do app (versão, etapa, sync…), gravado em `context.app` |
-| `accessCode` | um código que o app já tem, para não pedir à pessoa |
+| Property     | Meaning                                                                                     |
+| ------------ | ------------------------------------------------------------------------------------------- |
+| `appContext` | An object, or a function returning one: the app state (version, stage, sync...), saved in `context.app` |
+| `accessCode` | A code the app already holds, so the person is never asked for one                          |
 
-| Evento | |
-| --- | --- |
-| `feedback-close` | a pessoa fechou o painel |
-| `feedback-link` | `detail.url`, cancelável: `preventDefault()` para abrir o link você mesmo (o Tauri manda para o navegador do sistema) |
+| Event            | Meaning                                                                                       |
+| ---------------- | --------------------------------------------------------------------------------------------- |
+| `feedback-close` | The person closed the panel                                                                    |
+| `feedback-link`  | `detail.url`, cancelable: `preventDefault()` to open the link yourself (Tauri sends it to the system browser) |
 
-### React
+<details>
+<summary><b>React</b></summary>
 
 ```tsx
 useEffect(() => {
-  void import(/* @vite-ignore */ 'https://feedback-kit.megomes.workers.dev/v1/widget.js')
+  void import(/* @vite-ignore */ 'https://<your-worker>.workers.dev/v1/widget.js')
 }, [])
 
-<feedback-panel ref={ref} app="dailyflow" closable />
+<feedback-panel ref={ref} app="recipes" closable />
 // ref.current.appContext = () => ({ version, stage })
 // ref.current.addEventListener('feedback-close', onClose)
 ```
 
-O tipo do elemento para o TSX: `declare module 'react' { namespace JSX { interface IntrinsicElements { 'feedback-panel': any } } }`.
+The element type for TSX:
+`declare module 'react' { namespace JSX { interface IntrinsicElements { 'feedback-panel': any } } }`.
 
-## Design: tokens e partes
+</details>
 
-O painel desenha dentro de um shadow DOM: o CSS do app não entra e o dele não sai. A
-aparência se ajusta por **tokens**, variáveis CSS que atravessam essa barreira. Todos têm
-um valor padrão (claro e escuro); o app mapeia os seus por cima:
+## Theming
+
+The panel draws inside a shadow DOM: the app's CSS does not leak in and the panel's does
+not leak out. Its look is adjusted through **tokens**, CSS variables that cross that
+boundary. Every token has a light and a dark default, and the app maps its own on top:
 
 ```css
 feedback-panel {
@@ -74,83 +119,84 @@ feedback-panel {
 }
 ```
 
+<details>
+<summary><b>All tokens and parts</b></summary>
+
+<br>
+
 Tokens: `--fb-bg`, `--fb-surface`, `--fb-surface-hover`, `--fb-surface-active`,
 `--fb-input`, `--fb-border`, `--fb-border-subtle`, `--fb-border-strong`, `--fb-text`,
 `--fb-text-secondary`, `--fb-text-muted`, `--fb-focus`, `--fb-primary-bg`,
-`--fb-primary-text`, `--fb-danger`, `--fb-positive`, `--fb-warning`, `--fb-claude`, os
-tons `--fb-blue`, `--fb-purple`, `--fb-cyan`, `--fb-yellow`, `--fb-red`, `--fb-teal`,
+`--fb-primary-text`, `--fb-danger`, `--fb-positive`, `--fb-warning`, `--fb-claude`, the
+tones `--fb-blue`, `--fb-purple`, `--fb-cyan`, `--fb-yellow`, `--fb-red`, `--fb-teal`,
 `--fb-gray`, `--fb-radius-sm|md|lg`, `--fb-font`, `--fb-font-mono`, `--fb-font-size`,
-`--fb-max-width` e `--fb-padding`.
+`--fb-max-width` and `--fb-padding`.
 
-Para ajustes finos, as partes: `page`, `card`, `note`, `composer`, `resolution`, `pill`,
+For fine tuning, the parts: `page`, `card`, `note`, `composer`, `resolution`, `pill`,
 `chip`, `input`, `button`, `button-primary`, `filters`
 (`feedback-panel::part(card) { … }`).
 
-**O contrato é o `/v1/`.** Mudar o nome ou o sentido de um token, atributo, evento ou
-parte quebra apps: isso vai para `/v2/widget.js`, e o v1 continua como estava.
+</details>
 
-## A fila, pelo Claude
+> [!IMPORTANT]
+> **`/v1/` is the contract.** Renaming or changing the meaning of a token, attribute,
+> event or part breaks apps: that goes to `/v2/widget.js`, and v1 stays as it was.
+
+## The queue, from Claude
 
 ```bash
-npm run install-skill        # uma vez por máquina: a skill do Claude Code
-node cli/feedback.mjs apps   # os apps cadastrados
+npm run install-skill        # once per machine: the Claude Code skill
+node cli/feedback.mjs apps   # registered apps
 ```
 
-O resto (ler, atualizar, entregar) está em [skill/SKILL.md](skill/SKILL.md).
+Reading, updating and delivering notes is described in [skill/SKILL.md](skill/SKILL.md).
+A note goes through `open → in_progress → done`, or `discussing` when it needs a decision,
+and every change is logged with who made it. Claude's delivery is structured: a summary,
+what was done, what was ignored, decisions, commits, the deployed version and follow-ups.
 
-## Rodar no computador, do celular
+## Run it on your computer, from your phone
 
-O painel tem um botão **Rodar N notas**: ele põe as notas abertas numa fila no Worker, o
-agente no PC (ligado com o Windows, no ícone da bandeja) pega, roda o Claude Code headless
-na pasta do projeto e devolve tudo ao painel enquanto trabalha: o que o Claude vai
-dizendo, o relatório final, os commits, o custo e os tokens. As notas mudam de status
-pelo caminho, como sempre. Cada execução pode ser **cancelada** e, depois de terminada,
-**desfeita** (`git revert` dos commits dela, push, o `deploy` do projeto e as notas de
-volta para abertas, sem a entrega antiga; isso roda sem o Claude, não gasta nada).
-
-**Qual Claude.** Bugs vão no Sonnet, ideias, UX e perguntas no Opus, os dois em esforço
-médio (`models` na configuração do agente). Uma execução com os dois tipos roda duas
-sessões seguidas, bugs primeiro.
-
-**Cancelar não publica.** Uma execução cancelada (ou que passou do tempo) não faz mais
-push: os commits que ela ainda não tinha enviado ficam só no PC, na branch
-`feedback-kit/parada-<id>`, as mudanças soltas vão para o `git stash`, e as notas que
-estavam no meio voltam para abertas. O que o Claude já tinha enviado antes do cancelar
-continua no ar e pode ser desfeito como qualquer execução.
+The panel has a **Run N notes** button. It queues the open notes on the Worker; the agent
+on your computer picks them up, runs Claude Code headless in the project folder and
+streams everything back to the panel while it works: what Claude is saying, the final
+report, the commits, the cost and the tokens. Each run can be **canceled** and, once
+finished, **undone** (`git revert` of its commits, push, the project's deploy and the notes
+back to open; this runs without Claude and costs nothing).
 
 ```
-celular ── POST /runs ──▶ Worker (D1: runs, agents) ◀── consulta a cada 20 s ── agente no PC
-   ▲                                                                              │
-   └──────── o painel lê o progresso a cada 4 s ◀── relatórios ── claude -p ◀─────┘
+phone ── POST /runs ──▶ Worker (D1: runs, agents) ◀── polls every 20 s ── agent on your computer
+  ▲                                                                              │
+  └──────── the panel reads progress every 4 s ◀── reports ── claude -p ◀────────┘
 ```
 
-**Parado, não gasta nada do Claude.** A consulta do agente é um HTTP ao Worker (cerca de
-4 mil por dia, longe do limite gratuito). O Claude Code só abre quando há execução, e fecha
-ao terminar. No plano Pro/Max, uma execução consome a janela de 5 horas como uma sessão
-normal; o custo que aparece (`≈ US$`) é o equivalente na API, para comparar execuções.
-Com chave de API, é o que de fato se paga.
+- **Which Claude.** Bugs go to Sonnet; ideas, UX and questions go to Opus, both at medium
+  effort (`models` in the agent config). A run with both kinds runs two sessions in a row,
+  bugs first.
+- **Idle costs nothing.** The agent's poll is a plain HTTP call to the Worker (about 4,000
+  a day, far from the free limit). Claude Code only starts when there is a run.
+- **Plan limits.** Claude Code reports the 5-hour and weekly windows on every run; the
+  agent stores them and the panel shows them. Above `maxFiveHour` (90%) no new run starts.
+- **Nobody around.** The run prompt tells Claude not to ask: an ambiguous note goes to
+  `discussing` with the question, and it moves on. The agent only starts on a clean
+  working tree, pulls with `--ff-only` first and makes sure to push afterwards.
+- **Canceling does not publish.** Commits not pushed yet stay on the computer in a
+  `feedback-kit/parada-<id>` branch, loose changes go to `git stash`, and notes in the
+  middle go back to open.
 
-**O limite do Claude.** O Claude Code informa o uso das janelas de 5 horas e semanal a
-cada execução; o agente guarda e o painel mostra (com quando cada uma volta). Acima de
-`maxFiveHour` (90%), o agente não começa execução nova: ela espera na fila até a janela
-virar.
+<details>
+<summary><b>Set it up (once)</b></summary>
 
-**Sem ninguém por perto.** O prompt da execução diz ao Claude para não perguntar: nota
-ambígua ou que pede decisão do Matheus vai para `discussing` com a pergunta, e ele segue
-para a próxima. O agente só começa com a pasta limpa (`git status` sem mudanças), faz
-`git pull --ff-only` antes e garante o `git push` depois.
+<br>
 
-### Ligar (uma vez)
-
-1. No Worker, o código de execução (o painel pede uma vez por aparelho; é o mesmo para
-   todos os apps):
+1. On the Worker, the run code (the panel asks for it once per device; it is the same for
+   every app):
 
    ```bash
    node cli/feedback.mjs run-code | npx wrangler secret put RUN_HASH
-   npm run deploy      # aplica a migração 0002 e publica o painel novo
+   npm run deploy      # applies migration 0002 and publishes the new panel
    ```
 
-2. No PC com Windows (Node 22+, Git, Claude Code instalado e logado, e o
+2. On a Windows computer (Node 22+, Git, Claude Code installed and signed in, and
    `~/.feedback-kit/admin-code.txt`):
 
    ```powershell
@@ -159,99 +205,121 @@ para a próxima. O agente só começa com a pasta limpa (`git status` sem mudan�
    powershell -ExecutionPolicy Bypass -File agent\install-windows.ps1
    ```
 
-   Ele instala a skill, cria `~/.feedback-kit/agent.json`, lista os projetos que achou, põe
-   o atalho em Inicializar e liga o ícone.
+   It installs the skill, creates `~/.feedback-kit/agent.json`, lists the projects it
+   found, adds a Startup shortcut and starts the tray icon.
 
-3. No celular, no painel de qualquer app: **Rodar no computador…** e cole o conteúdo de
+3. On your phone, in any app's panel: **Run on computer...** and paste the contents of
    `~/.feedback-kit/run-code.txt`.
 
-Em macOS ou Linux, o mesmo agente roda com `npm run agent` (sem o ícone; ponha num
-launchd/systemd ou num `pm2`).
+On macOS or Linux the same agent runs with `npm run agent` (no tray icon; put it in
+launchd, systemd or `pm2`).
 
-### Projetos e configuração
+</details>
 
-O agente acha os projetos sozinho: toda pasta com `feedback-kit.json` dentro das `roots`
-(até dois níveis). O comando de publicar usado pelo desfazer vai no mesmo arquivo:
+<details>
+<summary><b>Projects and configuration</b></summary>
+
+<br>
+
+The agent finds projects on its own: every folder with a `feedback-kit.json` inside the
+`roots` (up to two levels deep). The deploy command used by undo lives in the same file:
 
 ```json
-{ "app": "dailyflow", "deploy": "npm run deploy" }
+{ "app": "recipes", "deploy": "npm run deploy" }
 ```
 
 `~/.feedback-kit/agent.json`:
 
-| Chave | Padrão | |
-| --- | --- | --- |
-| `name` | o nome do PC | como ele aparece no painel |
-| `roots` | `["~/Code"]` | onde procurar projetos |
-| `projects` | `{}` | `{ "<app>": "<pasta>" }`, à mão, vence a busca |
-| `models` | bug: `sonnet`/`medium`; o resto: `opus`/`medium` | `--model` e `--effort` por tipo de nota (`bug`, `idea`, `ux`, `question`; `default` para os não listados). Notas de modelos diferentes na mesma execução viram sessões em sequência, bugs primeiro |
-| `maxBudgetUsd` | `5` | `--max-budget-usd` por execução: corta uma execução que dispara |
-| `timeoutMinutes` | `45` | depois disso, para |
-| `permissionMode` | `bypassPermissions` | ninguém aprova ferramentas; `auto` é mais cuidadoso e pode parar no meio |
-| `maxFiveHour` | `0.9` | não começa execução nova com a janela de 5 h acima disso |
-| `dashboardPort` | `47820` | a porta do painel deste computador (só 127.0.0.1) |
+| Key              | Default                                   | Meaning                                                                       |
+| ---------------- | ----------------------------------------- | ----------------------------------------------------------------------------- |
+| `name`           | the computer's name                       | How it shows up in the panel                                                  |
+| `roots`          | `["~/Code"]`                              | Where to look for projects                                                    |
+| `projects`       | `{}`                                      | `{ "<app>": "<folder>" }`, by hand, wins over the search                      |
+| `models`         | bug: `sonnet`/`medium`; rest: `opus`/`medium` | `--model` and `--effort` per note kind (`bug`, `idea`, `ux`, `question`; `default` for the rest) |
+| `maxBudgetUsd`   | `5`                                       | `--max-budget-usd` per run: stops a runaway run                               |
+| `timeoutMinutes` | `45`                                      | Stops after this                                                              |
+| `permissionMode` | `bypassPermissions`                       | Nobody approves tools; `auto` is more careful and may stop midway             |
+| `maxFiveHour`    | `0.9`                                     | No new run when the 5-hour window is above this                               |
+| `dashboardPort`  | `47820`                                   | The local dashboard port (127.0.0.1 only)                                     |
 
-### O painel do PC
+</details>
 
-Ligado, o agente serve um painel só para este computador em `http://127.0.0.1:47820`
-(`dashboardPort` no `agent.json`): a execução ao vivo (o que o Claude está dizendo, o
-modelo de cada etapa, tempo e custo, e o cancelar), o limite do Claude nas janelas de 5 h e
-semanal, execuções e custo por dia, custo por modelo, tipos de nota, projetos, alertas, as
-últimas respostas e o histórico inteiro, com o detalhe de cada execução e o desfazer.
+<details>
+<summary><b>The computer dashboard</b></summary>
 
-Ele abre numa janela própria pelo **menu Iniciar** (o atalho `feedback-kit`, que também liga
-o agente se estiver desligado), pelo clique duplo no ícone da bandeja ou com
-`node agent/agent.mjs open`. Só aceita pedidos da própria página (nada de fora do PC).
+<br>
 
-Os ícones (o do Iniciar e os da bandeja, em branco e em grafite para a barra clara) são
-desenhados em `scripts/build-icons.mjs`; `npm run icons` gera `agent/icons/` de novo.
+While running, the agent serves a dashboard for that computer only at
+`http://127.0.0.1:47820`: the live run (what Claude is saying, the model of each step,
+time and cost, and cancel), the plan limits, runs and cost per day, cost per model, note
+kinds, projects, alerts, the latest answers and the full history, with each run's details
+and undo. It opens in its own window from the Start menu, by double-clicking the tray
+icon, or with `node agent/agent.mjs open`, and only accepts requests from its own page.
 
-`node agent/agent.mjs projects` lista o que ele achou. Cada execução guarda a saída inteira
-do Claude Code em `~/.feedback-kit/runs/<id>.jsonl`, e o log fica em
-`~/.feedback-kit/agent.log` (o ícone abre os dois).
+Each run keeps Claude Code's full output in `~/.feedback-kit/runs/<id>.jsonl`, and the log
+is in `~/.feedback-kit/agent.log`.
 
-**Segurança.** O código do app só escreve notas; rodar, cancelar e desfazer pedem também o
-código de execução. Mesmo assim, o texto das notas vira instrução para um Claude com
-permissão total no PC: só cadastre num app quem você deixaria mexer no código.
+</details>
 
-## Códigos
+> [!WARNING]
+> **Security.** An app's code can only write notes; running, canceling and undoing also
+> require the run code. Still, note text becomes instructions for a Claude with full
+> permissions on your computer: only give an app's code to people you would let touch the
+> code.
 
-- **Administração:** o CLI manda o código de `~/.feedback-kit/admin-code.txt`; o Worker
-  guarda só o SHA-256, no secret `ADMIN_HASH`.
-- **Execução remota:** `~/.feedback-kit/run-code.txt`; o Worker guarda o SHA-256 no
-  secret `RUN_HASH` (sem ele, o botão nem aparece). Trocar:
+## Access codes
+
+- **Admin:** the CLI sends the code in `~/.feedback-kit/admin-code.txt`; the Worker only
+  stores its SHA-256, in the `ADMIN_HASH` secret.
+- **Remote runs:** `~/.feedback-kit/run-code.txt`; the Worker stores its SHA-256 in the
+  `RUN_HASH` secret (without it, the button does not show up). Rotate it with
   `node cli/feedback.mjs run-code --new | npx wrangler secret put RUN_HASH`.
-- **Por app:** `node cli/feedback.mjs apps add <id> "<Nome>" [repo]` gera um código novo,
-  grava em `~/.feedback-kit/codes/<id>.txt` e guarda o hash no banco. Ele é colado uma vez
-  em cada aparelho, no próprio painel (ou o app passa em `accessCode`).
+- **Per app:** `node cli/feedback.mjs apps add <id> "<Name>" [repo]` generates a new code,
+  saves it in `~/.feedback-kit/codes/<id>.txt` and stores the hash in the database. It is
+  pasted once on each device, in the panel itself (or the app passes it in `accessCode`).
 
-Trocar o código de administração:
+<details>
+<summary><b>Rotate the admin code</b></summary>
 
 ```bash
 node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64url"))' > ~/.feedback-kit/admin-code.txt
 node -e 'process.stdout.write(require("crypto").createHash("sha256").update(require("fs").readFileSync(process.argv[1],"utf8")).digest("hex"))' ~/.feedback-kit/admin-code.txt | npx wrangler secret put ADMIN_HASH
 ```
 
-## Desenvolver
+</details>
+
+## Develop
 
 ```bash
-npm run verify    # tipos, testes do Worker (a migração real no SQLite do Node) e build
-npm run dev       # Worker local em http://localhost:8787 com D1 local
+npm run verify    # types, Worker tests (the real migration on Node's SQLite) and build
+npm run dev       # local Worker at http://localhost:8787 with a local D1
 ```
 
-Local: `.dev.vars` com `ADMIN_HASH=<sha-256>` (fora do git) e
-`npx wrangler d1 migrations apply feedback-kit --local`. O CLI aponta para ele com
-`FEEDBACK_KIT_URL=http://localhost:8787 FEEDBACK_KIT_ADMIN_CODE=<código>`, e o painel com o
-atributo `api`.
+Locally: `.dev.vars` with `ADMIN_HASH=<sha-256>` (git-ignored) and
+`npx wrangler d1 migrations apply feedback-kit --local`. Point the CLI at it with
+`FEEDBACK_KIT_URL=http://localhost:8787 FEEDBACK_KIT_ADMIN_CODE=<code>`, and the panel with
+the `api` attribute. The Worker's root serves a demo page: `?app=<id>&theme=dark&lang=en`.
 
-**Nos gatilhos do D1, `BEGIN` e `END` vão em maiúsculas.** O D1 remoto não reconhece o
-corpo do gatilho escrito em minúsculas.
+> [!TIP]
+> In D1 triggers, write `BEGIN` and `END` in uppercase. Remote D1 does not recognize a
+> trigger body written in lowercase.
 
-## Publicar
+## Deploy your own
+
+1. Create the database with `npx wrangler d1 create feedback-kit` and put its id in
+   `wrangler.jsonc`.
+2. Set the admin hash: see [Rotate the admin code](#access-codes).
+3. Publish:
 
 ```bash
 npm run deploy
 ```
 
-Compila o widget, aplica as migrações pendentes e publica o Worker. Suba `version` no
-`package.json` a cada mudança no widget: ela vai em `context.kit.version` de cada nota.
+It builds the widget, applies pending migrations and publishes the Worker. Bump `version`
+in `package.json` on every widget change: it goes into `context.kit.version` of each note.
+
+<br>
+
+<div align="center">
+<sub>Built by <a href="https://github.com/megomes">Matheus Ervilha</a> to keep side projects moving with Claude Code.</sub>
+</div>
