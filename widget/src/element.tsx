@@ -1,7 +1,7 @@
 /**
  * <feedback-panel>: the feedback of any app, as one element.
  *
- *   <script type="module" src="https://feedback-kit.megomes.workers.dev/v1/widget.js"></script>
+ *   <script type="module" src="https://<your-worker>.workers.dev/v1/widget.js"></script>
  *   <feedback-panel app="dailyflow" screen="today" lang="en" theme="dark" closable></feedback-panel>
  *
  * Attributes

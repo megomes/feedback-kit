@@ -217,8 +217,8 @@ phone ── POST /runs ──▶ Worker (D1: runs, agents) ◀── polls ever
    npm run deploy      # applies migration 0002 and publishes the new panel
    ```
 
-2. On a Windows computer (Node 22+, Git, Claude Code installed and signed in, and
-   `~/.feedback-kit/admin-code.txt`):
+2. On a Windows computer (Node 22+, Git, Claude Code installed and signed in,
+   `~/.feedback-kit/admin-code.txt`, and your Worker's URL in `~/.feedback-kit/url.txt`):
 
    ```powershell
    git clone https://github.com/megomes/feedback-kit $HOME\Code\feedback-kit
@@ -285,6 +285,10 @@ is in `~/.feedback-kit/agent.log`.
 > code.
 
 ## Access codes
+
+The CLI and the agent find the Worker in `~/.feedback-kit/url.txt` (one line with the URL)
+or in `FEEDBACK_KIT_URL`.
+
 
 - **Admin:** the CLI sends the code in `~/.feedback-kit/admin-code.txt`; the Worker only
   stores its SHA-256, in the `ADMIN_HASH` secret.

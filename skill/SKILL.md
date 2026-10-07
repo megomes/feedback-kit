@@ -8,10 +8,10 @@ description: A fila de feedback dos apps do Matheus (feedback-kit). Use quando e
 O Matheus escreve comentários sobre cada app num painel de feedback dentro do próprio
 app (`<feedback-panel>`). Cada nota tem número sequencial **por app** (`#1`, `#2`…, nunca
 reutilizado). Quando ele pedir "faz os ids 2, 3, 4 e 5", é dessa fila, do app do projeto
-atual. Tudo fica num banco só, o D1 `feedback-kit` da Cloudflare, atrás do Worker
-`https://feedback-kit.megomes.workers.dev`.
+atual. Tudo fica num banco só, o D1 `feedback-kit` da Cloudflare, atrás do Worker cujo
+endereço está em `~/.feedback-kit/url.txt` (ou em `FEEDBACK_KIT_URL`).
 
-O kit está clonado em `~/Code/feedback-kit` (repositório privado `megomes/feedback-kit`).
+O kit está clonado em `~/Code/feedback-kit` (repositório `megomes/feedback-kit`).
 **Antes de começar, atualize:** `git -C ~/Code/feedback-kit pull --ff-only`.
 
 ## O CLI
@@ -87,7 +87,7 @@ dinheiro, destrutivo) vai para `discussing` com a pergunta e as opções, e voc�
    para React, Next e Tauri):
 
    ```html
-   <script type="module" src="https://feedback-kit.megomes.workers.dev/v1/widget.js"></script>
+   <script type="module" src="<URL do Worker, de ~/.feedback-kit/url.txt>/v1/widget.js"></script>
    <feedback-panel app="<id>" screen="<tela>" closable></feedback-panel>
    ```
 

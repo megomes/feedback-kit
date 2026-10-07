@@ -34,8 +34,16 @@ import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
-const URL_BASE = (process.env.FEEDBACK_KIT_URL || 'https://feedback-kit.megomes.workers.dev').replace(/\/+$/, '')
 const HOME = join(homedir(), '.feedback-kit')
+// O Worker do kit: FEEDBACK_KIT_URL, ou ~/.feedback-kit/url.txt (uma linha com a URL).
+const URL_BASE = (
+  process.env.FEEDBACK_KIT_URL ||
+  (existsSync(join(HOME, 'url.txt')) ? readFileSync(join(HOME, 'url.txt'), 'utf8').trim() : '')
+).replace(/\/+$/, '')
+if (!URL_BASE) {
+  console.error('Sem o endereço do Worker: ponha a URL em ~/.feedback-kit/url.txt ou em FEEDBACK_KIT_URL.')
+  process.exit(1)
+}
 
 function fail(message) {
   console.error(message)
