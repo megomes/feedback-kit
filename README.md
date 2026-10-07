@@ -15,7 +15,7 @@
 **One feedback queue for all your apps.** You write notes inside each app, Claude works on
 them and records exactly what it did, and you confirm with 👍 or reopen with 👎.
 
-[Pieces](#pieces) · [Use it in an app](#use-it-in-an-app) · [Theming](#theming) · [Run from your phone](#run-it-on-your-computer-from-your-phone) · [Deploy](#deploy-your-own)
+[Pieces](#pieces) · [Use it in an app](#use-it-in-an-app) · [Theming](#theming) · [Run from your phone](#run-it-on-your-computer-from-your-phone) · [Dashboard](#the-computer-dashboard) · [Deploy](#deploy-your-own)
 
 </div>
 
@@ -244,10 +244,7 @@ The agent finds projects on its own: every folder with a `feedback-kit.json` ins
 
 </details>
 
-<details>
-<summary><b>The computer dashboard</b></summary>
-
-<br>
+### The computer dashboard
 
 While running, the agent serves a dashboard for that computer only at
 `http://127.0.0.1:47820`: the live run (what Claude is saying, the model of each step,
@@ -256,10 +253,29 @@ kinds, projects, alerts, the latest answers and the full history, with each run'
 and undo. It opens in its own window from the Start menu, by double-clicking the tray
 icon, or with `node agent/agent.mjs open`, and only accepts requests from its own page.
 
+<img src=".github/assets/dashboard-dark.png" alt="The computer dashboard: a run in progress, totals for the period and the Claude plan limits" width="100%">
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/dashboard-charts-dark.png" alt="Runs and cost per day, cost per model, alerts and note kinds"></td>
+    <td width="50%"><img src=".github/assets/dashboard-runs-dark.png" alt="Every run with project, notes, status, model, commits, duration and cost"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Cost and activity</b> · per day, per model, per note kind</td>
+    <td align="center"><b>Every run</b> · filter, search, open details, undo</td>
+  </tr>
+</table>
+
+<details>
+<summary><b>Light theme</b></summary>
+<br>
+<img src=".github/assets/dashboard-light.png" alt="The computer dashboard in the light theme" width="100%">
+</details>
+
+<sub>The dashboard interface is in Brazilian Portuguese. Screenshots use three fictional apps and made-up runs.</sub>
+
 Each run keeps Claude Code's full output in `~/.feedback-kit/runs/<id>.jsonl`, and the log
 is in `~/.feedback-kit/agent.log`.
-
-</details>
 
 > [!WARNING]
 > **Security.** An app's code can only write notes; running, canceling and undoing also
