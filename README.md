@@ -15,11 +15,30 @@
 **One feedback queue for all your apps.** You write notes inside each app, Claude works on
 them and records exactly what it did, and you confirm with 👍 or reopen with 👎.
 
-[Pieces](#pieces) · [Use it in an app](#use-it-in-an-app) · [Theming](#theming) · [Run from your phone](#run-it-on-your-computer-from-your-phone) · [Dashboard](#the-computer-dashboard) · [Deploy](#deploy-your-own)
+[Screenshots](#screenshots) · [Pieces](#pieces) · [Use it in an app](#use-it-in-an-app) · [Theming](#theming) · [Run from your phone](#run-it-on-your-computer-from-your-phone) · [Dashboard](#the-computer-dashboard) · [Deploy](#deploy-your-own)
 
 </div>
 
 <br>
+
+## Screenshots
+
+**The computer dashboard**: the run in progress, cost and activity, plan limits and every run.
+
+<img src=".github/assets/dashboard-dark.png" alt="The computer dashboard: a run in progress, totals for the period and the Claude plan limits" width="100%">
+
+<table>
+  <tr>
+    <td width="50%"><img src=".github/assets/dashboard-charts-dark.png" alt="Runs and cost per day, cost per model, alerts and note kinds"></td>
+    <td width="50%"><img src=".github/assets/dashboard-runs-dark.png" alt="Every run with project, notes, status, model, commits, duration and cost"></td>
+  </tr>
+  <tr>
+    <td align="center"><b>Cost and activity</b> · per day, per model, per note kind</td>
+    <td align="center"><b>Every run</b> · filter, search, open details, undo</td>
+  </tr>
+</table>
+
+**The panel inside each app**: write notes, follow them, and confirm what Claude delivered.
 
 <table>
   <tr>
@@ -35,10 +54,12 @@ them and records exactly what it did, and you confirm with 👍 or reopen with �
 <details>
 <summary><b>Light theme</b></summary>
 <br>
+<img src=".github/assets/dashboard-light.png" alt="The computer dashboard in the light theme" width="100%">
+<br><br>
 <img src=".github/assets/panel-light.png" alt="The feedback panel in the light theme" width="100%">
 </details>
 
-<sub>Screenshots use a fictional "Recipe Box" app on a local Worker with a throwaway database.</sub>
+<sub>Fictional apps and runs on a local Worker with a throwaway database. The dashboard interface is in Brazilian Portuguese; the panel speaks English or Portuguese.</sub>
 
 ## Why
 
@@ -252,27 +273,7 @@ time and cost, and cancel), the plan limits, runs and cost per day, cost per mod
 kinds, projects, alerts, the latest answers and the full history, with each run's details
 and undo. It opens in its own window from the Start menu, by double-clicking the tray
 icon, or with `node agent/agent.mjs open`, and only accepts requests from its own page.
-
-<img src=".github/assets/dashboard-dark.png" alt="The computer dashboard: a run in progress, totals for the period and the Claude plan limits" width="100%">
-
-<table>
-  <tr>
-    <td width="50%"><img src=".github/assets/dashboard-charts-dark.png" alt="Runs and cost per day, cost per model, alerts and note kinds"></td>
-    <td width="50%"><img src=".github/assets/dashboard-runs-dark.png" alt="Every run with project, notes, status, model, commits, duration and cost"></td>
-  </tr>
-  <tr>
-    <td align="center"><b>Cost and activity</b> · per day, per model, per note kind</td>
-    <td align="center"><b>Every run</b> · filter, search, open details, undo</td>
-  </tr>
-</table>
-
-<details>
-<summary><b>Light theme</b></summary>
-<br>
-<img src=".github/assets/dashboard-light.png" alt="The computer dashboard in the light theme" width="100%">
-</details>
-
-<sub>The dashboard interface is in Brazilian Portuguese. Screenshots use three fictional apps and made-up runs.</sub>
+Screenshots are [at the top](#screenshots).
 
 Each run keeps Claude Code's full output in `~/.feedback-kit/runs/<id>.jsonl`, and the log
 is in `~/.feedback-kit/agent.log`.
