@@ -339,6 +339,10 @@ npm run deploy
 It builds the widget, applies pending migrations and publishes the Worker. Bump `version`
 in `package.json` on every widget change: it goes into `context.kit.version` of each note.
 
+## License
+
+[MIT](LICENSE)
+
 <br>
 
 <div align="center">
