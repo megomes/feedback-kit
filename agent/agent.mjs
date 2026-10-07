@@ -385,11 +385,14 @@ async function groups(run, cfg) {
 
 const quote = (arg) => (/^[\w.:\\/=-]+$/.test(arg) ? arg : `"${arg.replace(/"/g, '\\"')}"`)
 
-/** Starts Claude Code headless. On Windows `claude` may be a .cmd, so it goes through the shell as one line. */
+/**
+ * Starts Claude Code headless. On Windows `claude` may be a .cmd, so it goes through the
+ * shell as one line; `cfg.claude` goes as written (it may carry its own arguments).
+ */
 function startClaude(cfg, args, cwd, runId) {
   const options = { cwd, windowsHide: true, env: { ...process.env, FEEDBACK_KIT_RUN: String(runId) } }
   return WINDOWS
-    ? spawn([cfg.claude, ...args].map(quote).join(' '), { ...options, shell: true })
+    ? spawn([cfg.claude, ...args.map(quote)].join(' '), { ...options, shell: true })
     : spawn(cfg.claude, args, options)
 }
 
@@ -453,8 +456,9 @@ async function session(run, project, cfg, group, ctx) {
       killTree(child)
       continue
     }
-    // A report also keeps the computer "online" in the panel during a long run.
-    if (ctx.dirty || Date.now() - ctx.lastReport > 60_000) {
+    // A report also keeps the computer "online" in the panel, and brings a cancel back:
+    // every 10 s even while Claude is quiet (a long build), so a cancel is never slow.
+    if (ctx.dirty || Date.now() - ctx.lastReport > 10_000) {
       ctx.dirty = false
       ctx.lastReport = Date.now()
       const status = await report(run, { messages: ctx.messages })
