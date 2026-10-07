@@ -1,0 +1,13 @@
+{
+  "name": "feedback-kit · agente",
+  "short_name": "feedback-kit",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ebf1fe",
+  "theme_color": "#f6f6f7",
+  "icons": [
+    { "src": "/icons/app-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icons/app-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/icons/app.svg", "sizes": "any", "type": "image/svg+xml" }
+  ]
+}

@@ -189,6 +189,22 @@ O agente acha os projetos sozinho: toda pasta com `feedback-kit.json` dentro das
 | `timeoutMinutes` | `45` | depois disso, para |
 | `permissionMode` | `bypassPermissions` | ninguém aprova ferramentas; `auto` é mais cuidadoso e pode parar no meio |
 | `maxFiveHour` | `0.9` | não começa execução nova com a janela de 5 h acima disso |
+| `dashboardPort` | `47820` | a porta do painel deste computador (só 127.0.0.1) |
+
+### O painel do PC
+
+Ligado, o agente serve um painel só para este computador em `http://127.0.0.1:47820`
+(`dashboardPort` no `agent.json`): a execução ao vivo (o que o Claude está dizendo, o
+modelo de cada etapa, tempo e custo, e o cancelar), o limite do Claude nas janelas de 5 h e
+semanal, execuções e custo por dia, custo por modelo, tipos de nota, projetos, alertas, as
+últimas respostas e o histórico inteiro, com o detalhe de cada execução e o desfazer.
+
+Ele abre numa janela própria pelo **menu Iniciar** (o atalho `feedback-kit`, que também liga
+o agente se estiver desligado), pelo clique duplo no ícone da bandeja ou com
+`node agent/agent.mjs open`. Só aceita pedidos da própria página (nada de fora do PC).
+
+Os ícones (o do Iniciar e os da bandeja, em branco e em grafite para a barra clara) são
+desenhados em `scripts/build-icons.mjs`; `npm run icons` gera `agent/icons/` de novo.
 
 `node agent/agent.mjs projects` lista o que ele achou. Cada execução guarda a saída inteira
 do Claude Code em `~/.feedback-kit/runs/<id>.jsonl`, e o log fica em

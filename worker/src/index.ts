@@ -360,13 +360,34 @@ async function adminRoute(req: Request, env: Env, parts: string[]): Promise<Resp
     return agentReport(req, env, id)
   }
 
+  // The agent's own panel on the computer: every app's runs, and the widget's actions.
+  // GET /v1/admin/runs?limit=200 · POST /v1/admin/runs/:id/cancel|rollback · POST /v1/admin/apps/:app/runs
+  if (parts.length === 1 && parts[0] === 'runs' && req.method === 'GET') return allRuns(req, env)
+  if (parts[0] === 'runs' && parts.length === 3 && req.method === 'POST') {
+    const id = Number(parts[1])
+    if (!Number.isInteger(id) || id <= 0) return json({ error: 'invalid' }, 400)
+    const row = await env.DB.prepare(`select app from runs where id = ?`).bind(id).first<{ app: string }>()
+    const app = row ? await findApp(env, row.app) : null
+    if (!app) return json({ error: 'run not found' }, 404)
+    if (parts[2] === 'cancel') return cancelRun(env, app, id)
+    if (parts[2] === 'rollback') return rollbackRun(env, app, id)
+    return json({ error: 'not found' }, 404)
+  }
+  if (parts[0] === 'apps' && parts.length === 3 && parts[2] === 'runs' && req.method === 'POST') {
+    const app = await findApp(env, parts[1] ?? '')
+    if (!app) return json({ error: 'app not found' }, 404)
+    return queueRun(req, env, app)
+  }
+
   // GET /v1/admin/apps · POST /v1/admin/apps
   if (parts.length === 1 && parts[0] === 'apps') {
     if (req.method === 'GET') {
       const { results } = await env.DB.prepare(
         `select a.id, a.name, a.repo, a.created_at as createdAt,
                 (select count(*) from notes n where n.app = a.id and n.deleted = 0
-                    and n.status <> 'archived') as active
+                    and n.status <> 'archived') as active,
+                (select count(*) from notes n where n.app = a.id and n.deleted = 0
+                    and n.status = 'open') as open
            from apps a order by a.id`,
       ).all()
       return json({ apps: results })
@@ -562,6 +583,16 @@ async function listRuns(env: Env, app: AppRow): Promise<Response> {
     agent: agent ? { ...parseAgent(agent), servesApp: (JSON.parse(agent.apps) as string[]).includes(app.id) } : null,
     open: open.results.map((r) => r.number),
   })
+}
+
+/** Every app's latest runs and every agent, for the panel on the computer. */
+async function allRuns(req: Request, env: Env): Promise<Response> {
+  const limit = Math.min(500, Math.max(1, Number(new URL(req.url).searchParams.get('limit')) || 200))
+  const [runs, agents] = await Promise.all([
+    env.DB.prepare(`select * from runs order by id desc limit ?`).bind(limit).all<RunRow>(),
+    env.DB.prepare(`select * from agents order by last_seen desc`).all<AgentRow>(),
+  ])
+  return json({ runs: runs.results.map(parseRun), agents: agents.results.map((a) => parseAgent(a)) })
 }
 
 /** Queues the open notes (or the ones picked) for the agent. One active run per app. */

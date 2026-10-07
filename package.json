@@ -13,10 +13,12 @@
     "verify": "npm run typecheck && npm test && npm run build",
     "feedback": "node cli/feedback.mjs",
     "install-skill": "node cli/install-skill.mjs",
-    "agent": "node agent/agent.mjs"
+    "agent": "node agent/agent.mjs",
+    "icons": "node scripts/build-icons.mjs"
   },
   "devDependencies": {
     "@cloudflare/workers-types": "^5.20261006.1",
+    "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^26.6.4",
     "esbuild": "^0.28.2",
     "lucide-preact": "^1.52.0",
@@ -24,5 +26,8 @@
     "typescript": "^7.0.2",
     "vitest": "^4.1.11",
     "wrangler": "^4.148.0"
+  },
+  "dependencies": {
+    "electron": "^44.6.0"
   }
 }

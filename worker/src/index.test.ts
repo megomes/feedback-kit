@@ -242,6 +242,27 @@ describe('remote runs', () => {
     expect(listed).toMatchObject({ status: 'canceled', baseSha: 'aaa', messages: ['Lendo a nota', 'Parei'] })
   })
 
+  it('lets the computer panel list, start, cancel and undo with the admin code alone', async () => {
+    await app('dailyflow').post({ body: 'um' })
+    await app('markdown-viewer').post({ body: 'outra' })
+    expect((await call('POST', '/v1/apps/dailyflow/runs', ADMIN, {})).status).toBe(401)
+    const started = await call('POST', '/v1/admin/apps/dailyflow/runs', ADMIN, {})
+    expect(started.data.run).toMatchObject({ app: 'dailyflow', notes: [1], status: 'queued' })
+    await call('POST', '/v1/admin/apps/markdown-viewer/runs', ADMIN, {})
+    await poll()
+
+    const all = await call('GET', '/v1/admin/runs?limit=10', ADMIN)
+    expect(all.data.runs.map((r: { app: string }) => r.app)).toEqual(['markdown-viewer', 'dailyflow'])
+    expect(all.data.agents[0]).toMatchObject({ name: 'PC de casa', online: true })
+    expect((await call('GET', '/v1/admin/runs', 'nada')).status).toBe(401)
+
+    expect((await call('POST', `/v1/admin/runs/${started.data.run.id}/cancel`, ADMIN)).status).toBe(200)
+    expect((await call('POST', '/v1/admin/runs/999/cancel', ADMIN)).status).toBe(404)
+    await report(started.data.run.id, { baseSha: 'aaa', headSha: 'bbb', commits: ['bbb'] })
+    const undo = await call('POST', `/v1/admin/runs/${started.data.run.id}/rollback`, ADMIN)
+    expect(undo.data.run).toMatchObject({ kind: 'rollback', targetRun: started.data.run.id })
+  })
+
   it('fails a run the agent lost by restarting', async () => {
     await app('dailyflow').post({ body: 'um' })
     const { run } = (await runs('', 'POST', {})).data

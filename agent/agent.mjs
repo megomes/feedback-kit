@@ -6,6 +6,10 @@
  *   node agent/agent.mjs            o laço: pergunta ao Worker por trabalho a cada ~20 s
  *   node agent/agent.mjs projects   os apps que ele achou e as pastas deles
  *   node agent/agent.mjs init       cria ~/.feedback-kit/agent.json com os padrões
+ *   node agent/agent.mjs open       abre o painel deste computador numa janela
+ *
+ * Ligado, ele também serve esse painel em http://127.0.0.1:47820 (agent/dashboard/): o
+ * histórico, os gráficos de uso e custo, a execução ao vivo e o limite do Claude.
  *
  * Parado, ele não gasta nada do Claude: a consulta é um HTTP ao Worker. O Claude Code só
  * roda quando há uma execução na fila, e sai ao terminar (`claude -p`).
@@ -38,6 +42,7 @@ import { appendFileSync, existsSync, mkdirSync, readdirSync, readFileSync, write
 import { homedir, hostname } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { openWindow, startDashboard } from './dashboard.mjs'
 
 const VERSION = '1.1.0'
 const HOME = join(homedir(), '.feedback-kit')
@@ -83,7 +88,12 @@ const DEFAULTS = {
   maxFiveHour: 0.9,
   /** The command that starts Claude Code. */
   claude: 'claude',
+  /** The panel on this computer: http://127.0.0.1:<port> (`node agent/agent.mjs open`). */
+  dashboardPort: 47820,
 }
+
+/** What the panel on this computer shows live: the last poll and the run going now. */
+const live = { status: { state: 'starting' }, current: null, lastPoll: null, online: null }
 
 /* ------------------------------------------------------------------ helpers */
 
@@ -130,6 +140,7 @@ function saveState(patch) {
 }
 
 function writeStatus(status) {
+  live.status = status
   try {
     writeFileSync(FILES.status, JSON.stringify({ ...status, at: new Date().toISOString(), pid: process.pid }, null, 2))
   } catch {
@@ -369,6 +380,7 @@ async function groups(run, cfg) {
   try {
     const { notes } = await call('GET', `/apps/${run.app}/notes?ids=${run.notes.join(',')}`)
     kinds = Object.fromEntries(notes.map((n) => [n.id ?? n.number, n.kind]))
+    run.kinds = kinds
   } catch (error) {
     log(`#${run.id}: não li os tipos das notas (${error.message}); todas vão no modelo padrão`)
   }
@@ -483,6 +495,12 @@ async function work(run, project, cfg) {
     spent: 0,
   }
   const plan = await groups(run, cfg)
+  if (live.current) {
+    live.current.messages = ctx.messages
+    live.current.kinds = run.kinds ?? {}
+    live.current.plan = plan.map(({ model, effort, notes }) => ({ model, effort, notes }))
+    live.current.base = base
+  }
   await report(run, { baseSha: base, messages: ctx.messages })
 
   const results = []
@@ -492,8 +510,10 @@ async function work(run, project, cfg) {
     if (plan.length > 1) {
       ctx.messages.push(`${group.model ?? 'Modelo padrão'}${group.effort ? ` (${group.effort})` : ''} nas notas ${group.notes.map((n) => `#${n}`).join(' ')}.`)
     }
+    if (live.current) live.current.group = plan.indexOf(group)
     const out = await session(run, project, cfg, group, ctx)
     if (out.result) results.push({ ...out.result, model: group.model, effort: group.effort })
+    if (live.current) live.current.spent = ctx.spent + (out.result?.total_cost_usd ?? 0)
     ctx.spent += out.result?.total_cost_usd ?? 0
     if (out.stopped) {
       stopped = out.stopped
@@ -552,6 +572,11 @@ async function work(run, project, cfg) {
         cacheWriteTokens: usageSum('cache_creation_input_tokens'),
         sessionId: results.map((r) => r.session_id).filter(Boolean).join(',') || null,
         model: results.map((r) => `${r.model ?? 'padrão'}${r.effort ? `/${r.effort}` : ''}`).join(', '),
+        // For the panel's charts: what each model cost, and which kinds of notes went.
+        byModel: Object.fromEntries(
+          results.map((r) => [`${r.model ?? 'padrão'}${r.effort ? `/${r.effort}` : ''}`, r.total_cost_usd ?? 0]),
+        ),
+        kinds: Object.values(run.kinds ?? {}).reduce((acc, k) => ({ ...acc, [k]: (acc[k] ?? 0) + 1 }), {}),
       }
     : {}
   const failed = !!stopped || problems.length > 0 || results.length === 0
@@ -578,6 +603,7 @@ async function rollback(run, target, project) {
   if (!target?.baseSha || !target?.headSha) throw new Error('A execução desfeita não registrou commits.')
   const { base, upstream } = prepare(project.dir)
   const messages = [`Desfazendo a execução #${target.id}: ${target.baseSha.slice(0, 7)}..${target.headSha.slice(0, 7)}.`]
+  if (live.current) live.current.messages = messages
   await report(run, { baseSha: base, messages })
 
   try {
@@ -632,8 +658,41 @@ async function rollback(run, target, project) {
 
 /* --------------------------------------------------------------------- loop */
 
+/** The agent as the panel on this computer sees it. */
+function snapshot() {
+  const cfg = config()
+  const { name, models, maxBudgetUsd, timeoutMinutes, permissionMode, maxFiveHour, pollSeconds, roots } = cfg
+  return {
+    id: state().id,
+    name,
+    version: VERSION,
+    worker: URL_BASE,
+    status: live.status,
+    current: live.current,
+    lastPoll: live.lastPoll,
+    online: live.online,
+    paused: existsSync(FILES.paused),
+    usage: currentUsage(),
+    projects: discover(cfg),
+    config: { models, maxBudgetUsd, timeoutMinutes, permissionMode, maxFiveHour, pollSeconds, roots },
+    now: new Date().toISOString(),
+  }
+}
+
 async function loop() {
   log(`agente ${VERSION} ligado, falando com ${URL_BASE}`)
+  startDashboard(
+    config().dashboardPort,
+    {
+      kitHome: HOME,
+      files: FILES,
+      call,
+      state: snapshot,
+      projects: () => discover(config()),
+      transcript: (id) => join(FILES.runs, `${id}.jsonl`),
+    },
+    log,
+  )
   let failures = 0
   while (true) {
     const cfg = config()
@@ -652,6 +711,8 @@ async function loop() {
         current: null,
       })
       failures = 0
+      live.lastPoll = new Date().toISOString()
+      live.online = true
       writeStatus({
         state: paused ? 'paused' : limit ? 'limited' : 'idle',
         limitedBy: limit,
@@ -661,6 +722,19 @@ async function loop() {
       if (run) {
         log(`#${run.id} ${run.app}: ${run.kind} ${run.notes.map((n) => `#${n}`).join(' ')}`)
         writeStatus({ state: 'running', run: run.id, app: run.app, usage })
+        live.current = {
+          id: run.id,
+          app: run.app,
+          kind: run.kind,
+          notes: run.notes,
+          instructions: run.instructions,
+          target: run.targetRun ?? null,
+          startedAt: new Date().toISOString(),
+          messages: [],
+          plan: null,
+          group: null,
+          spent: 0,
+        }
         const project = projects[run.app]
         try {
           if (!project) throw new Error(`Este computador não tem pasta para o app ${run.app}.`)
@@ -669,11 +743,14 @@ async function loop() {
         } catch (error) {
           log(`#${run.id}: ${error.message}`)
           await report(run, { status: 'failed', error: error.message })
+        } finally {
+          live.current = null
         }
         continue
       }
     } catch (error) {
       failures++
+      live.online = false
       log(`sem conexão com o Worker (${failures}x): ${error.message}`)
       writeStatus({ state: 'offline', error: error.message, apps: projects, usage })
     }
@@ -686,13 +763,21 @@ if (command === 'projects') {
   const projects = discover(config())
   for (const [app, p] of Object.entries(projects)) console.log(`${app} · ${p.dir}${p.deploy ? ` · deploy: ${p.deploy}` : ''}`)
   if (!Object.keys(projects).length) console.log(`Nenhum projeto com feedback-kit.json em ${config().roots.join(', ')}.`)
+} else if (command === 'open') {
+  // The panel in its own window; the agent (started by the tray) serves it.
+  openWindow(`http://127.0.0.1:${config().dashboardPort}/`)
 } else if (command === 'init') {
   if (existsSync(FILES.config)) console.log(`${FILES.config} já existe.`)
   else {
-    const { name, roots, projects, models, maxBudgetUsd, timeoutMinutes, permissionMode, maxFiveHour } = DEFAULTS
+    const { name, roots, projects, models, maxBudgetUsd, timeoutMinutes, permissionMode, maxFiveHour, dashboardPort } =
+      DEFAULTS
     writeFileSync(
       FILES.config,
-      JSON.stringify({ name, roots, projects, models, maxBudgetUsd, timeoutMinutes, permissionMode, maxFiveHour }, null, 2),
+      JSON.stringify(
+        { name, roots, projects, models, maxBudgetUsd, timeoutMinutes, permissionMode, maxFiveHour, dashboardPort },
+        null,
+        2,
+      ),
     )
     console.log(`Criado ${FILES.config}`)
   }

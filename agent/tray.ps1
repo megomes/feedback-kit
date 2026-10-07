@@ -1,20 +1,23 @@
 ﻿# O ícone do agente do feedback-kit na bandeja do Windows.
 #
 # Liga o agente (node agent\agent.mjs) escondido, religa se ele cair, e mostra o estado
-# que ele escreve em ~/.feedback-kit/agent-status.json: a cor do ícone (verde pronto,
-# azul rodando, amarelo pausado ou no limite, cinza sem conexão), a dica com o limite
-# do Claude e um aviso quando uma execução começa ou termina.
+# que ele escreve em ~/.feedback-kit/agent-status.json: o balão do feedback-kit em
+# branco (ou grafite, com a barra de tarefas clara) com um ponto de cor (sem ponto pronto,
+# azul rodando, amarelo pausado, laranja no limite, cinza sem conexão), a dica com o
+# limite do Claude e um aviso quando uma execução começa ou termina. Clique duplo abre o
+# painel deste computador.
+#
+#   tray.ps1          liga (o atalho de Inicializar)
+#   tray.ps1 -Open    liga se precisar e abre o painel (o atalho do menu Iniciar)
 #
 # Não precisa instalar nada: só o PowerShell e o .NET que vêm com o Windows. Para iniciar
 # com o Windows, rode agent\install-windows.ps1 uma vez.
 
+param([switch]$Open)
+
 $ErrorActionPreference = 'Stop'
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
-
-# Uma instância só.
-$mutex = New-Object System.Threading.Mutex($false, 'feedback-kit-agent-tray')
-if (-not $mutex.WaitOne(0)) { exit }
 
 $kitHome = Join-Path $env:USERPROFILE '.feedback-kit'
 $statusFile = Join-Path $kitHome 'agent-status.json'
@@ -24,23 +27,51 @@ $configFile = Join-Path $kitHome 'agent.json'
 $agentScript = Join-Path $PSScriptRoot 'agent.mjs'
 New-Item -ItemType Directory -Force -Path $kitHome | Out-Null
 
-function New-DotIcon([System.Drawing.Color]$color) {
-  $bmp = New-Object System.Drawing.Bitmap 16, 16
-  $g = [System.Drawing.Graphics]::FromImage($bmp)
-  $g.SmoothingMode = 'AntiAlias'
-  $g.Clear([System.Drawing.Color]::Transparent)
-  $g.FillEllipse((New-Object System.Drawing.SolidBrush $color), 2, 2, 12, 12)
-  $g.DrawEllipse((New-Object System.Drawing.Pen ([System.Drawing.Color]::FromArgb(160, 0, 0, 0)), 1), 2, 2, 12, 12)
-  $g.Dispose()
-  [System.Drawing.Icon]::FromHandle($bmp.GetHicon())
+function Get-PanelUrl {
+  $port = 47820
+  try {
+    $cfg = Get-Content $configFile -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ($cfg.dashboardPort) { $port = [int]$cfg.dashboardPort }
+  } catch {}
+  "http://127.0.0.1:$port/"
 }
-$icons = @{
-  idle    = New-DotIcon ([System.Drawing.Color]::FromArgb(52, 199, 89))
-  running = New-DotIcon ([System.Drawing.Color]::FromArgb(64, 132, 255))
-  paused  = New-DotIcon ([System.Drawing.Color]::FromArgb(240, 180, 40))
-  limited = New-DotIcon ([System.Drawing.Color]::FromArgb(240, 120, 40))
-  offline = New-DotIcon ([System.Drawing.Color]::FromArgb(140, 140, 150))
+function Open-Panel {
+  # Its own window, like VS Code's (agent\window.cjs); Edge in app mode if Electron is missing.
+  $electron = Join-Path (Split-Path $PSScriptRoot) 'node_modules\electron\dist\electron.exe'
+  if (Test-Path $electron) {
+    Start-Process $electron -ArgumentList "`"$(Join-Path $PSScriptRoot 'window.cjs')`""
+    return
+  }
+  $url = Get-PanelUrl
+  try { Start-Process msedge.exe -ArgumentList "--app=$url", '--window-size=1480,980' }
+  catch { Start-Process $url }
 }
+
+# Uma instância só: a segunda (o atalho do Iniciar com o ícone já ligado) só abre o painel.
+$mutex = New-Object System.Threading.Mutex($false, 'feedback-kit-agent-tray')
+if (-not $mutex.WaitOne(0)) {
+  if ($Open) { Open-Panel }
+  exit
+}
+
+# The icons drawn by scripts/build-icons.mjs: white for a dark taskbar, graphite for a
+# light one, picked again when the theme changes.
+$iconDir = Join-Path $PSScriptRoot 'icons'
+function Test-LightTaskbar {
+  try {
+    (Get-ItemProperty 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Themes\Personalize' -ErrorAction Stop).SystemUsesLightTheme -eq 1
+  } catch { $false }
+}
+function Get-TrayIcons {
+  $light = Test-LightTaskbar
+  $suffix = $(if ($light) { '-dark' } else { '' })
+  $set = @{ light = $light }
+  foreach ($name in 'idle', 'running', 'paused', 'limited', 'offline') {
+    $set[$name] = New-Object System.Drawing.Icon((Join-Path $iconDir "tray-$name$suffix.ico"), 16, 16)
+  }
+  $set
+}
+$script:icons = Get-TrayIcons
 
 # ---------------------------------------------------------------- the agent process
 $script:agent = $null
@@ -59,11 +90,14 @@ function Stop-Agent {
 
 # ------------------------------------------------------------------------ the icon
 $tray = New-Object System.Windows.Forms.NotifyIcon
-$tray.Icon = $icons.offline
+$tray.Icon = $script:icons.offline
 $tray.Text = 'feedback-kit: ligando…'
 $tray.Visible = $true
 
 $menu = New-Object System.Windows.Forms.ContextMenuStrip
+$itemPanel = $menu.Items.Add('Abrir o painel')
+$itemPanel.Font = New-Object System.Drawing.Font($itemPanel.Font, [System.Drawing.FontStyle]::Bold)
+$menu.Items.Add('-') | Out-Null
 $itemState = $menu.Items.Add('Ligando…'); $itemState.Enabled = $false
 $itemUsage = $menu.Items.Add('Limite do Claude: ainda sem leitura'); $itemUsage.Enabled = $false
 $menu.Items.Add('-') | Out-Null
@@ -79,6 +113,9 @@ $menu.Items.Add('-') | Out-Null
 $itemQuit = $menu.Items.Add('Sair')
 $tray.ContextMenuStrip = $menu
 
+$itemPanel.add_Click({ Open-Panel })
+$tray.add_DoubleClick({ Open-Panel })
+$tray.add_BalloonTipClicked({ Open-Panel })
 $itemPause.add_Click({
   if (Test-Path $pausedFile) { Remove-Item $pausedFile } else { New-Item -ItemType File -Path $pausedFile | Out-Null }
 })
@@ -94,7 +131,6 @@ $itemQuit.add_Click({
   $tray.Visible = $false
   [System.Windows.Forms.Application]::Exit()
 })
-$tray.add_DoubleClick({ if (Test-Path $logFile) { Start-Process notepad.exe $logFile } })
 
 function Format-Window($w, $label) {
   if (-not $w) { return $null }
@@ -115,6 +151,8 @@ $timer.Interval = 3000
 $timer.add_Tick({
   try {
     if (-not $script:agent -or $script:agent.HasExited) { Start-Agent }
+    # The taskbar theme changed: the other set of icons.
+    if ((Test-LightTaskbar) -ne $script:icons.light) { $script:icons = Get-TrayIcons }
     if (-not (Test-Path $statusFile)) { return }
     $s = Get-Content $statusFile -Raw -Encoding UTF8 | ConvertFrom-Json
     $state = $s.state
@@ -135,20 +173,21 @@ $timer.add_Tick({
     if ($tip.Length -gt 63) { $tip = $tip.Substring(0, 63) }
     $tray.Text = $tip
 
+    $set = $script:icons
     $tray.Icon = $(switch ($state) {
-      'running' { $icons.running }
-      'paused'  { $icons.paused }
-      'limited' { $icons.limited }
-      'offline' { $icons.offline }
-      default   { $icons.idle }
+      'running' { $set.running }
+      'paused'  { $set.paused }
+      'limited' { $set.limited }
+      'offline' { $set.offline }
+      default   { $set.idle }
     })
 
-    # A notice when a run starts and when it ends.
+    # A notice when a run starts and when it ends (a click opens the panel).
     if ($state -eq 'running' -and $script:lastRun -ne $s.run) {
       $script:lastRun = $s.run
       $tray.ShowBalloonTip(4000, 'feedback-kit', "Execução #$($s.run) começou ($($s.app)).", 'Info')
     } elseif ($state -ne 'running' -and $script:lastState -eq 'running' -and $script:lastRun) {
-      $tray.ShowBalloonTip(4000, 'feedback-kit', "Execução #$($script:lastRun) terminou. O resultado está no painel.", 'Info')
+      $tray.ShowBalloonTip(4000, 'feedback-kit', "Execução #$($script:lastRun) terminou. Clique para ver no painel.", 'Info')
       $script:lastRun = $null
     }
     $script:lastState = $state
@@ -177,6 +216,13 @@ $timer.add_Tick({
 
 Start-Agent
 $timer.Start()
+if ($Open) {
+  # The agent serves the panel a moment after it starts.
+  $opener = New-Object System.Windows.Forms.Timer
+  $opener.Interval = 2500
+  $opener.add_Tick({ $opener.Stop(); Open-Panel })
+  $opener.Start()
+}
 [System.Windows.Forms.Application]::Run()
 $timer.Stop()
 $tray.Dispose()

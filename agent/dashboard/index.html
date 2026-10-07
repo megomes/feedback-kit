@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="pt-BR">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>feedback-kit · agente</title>
+    <link rel="icon" href="/icons/app.svg" type="image/svg+xml" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#f6f6f7" />
+    <script>
+      // The theme before anything paints: the one chosen last time, else the system's.
+      try {
+        const forced = new URLSearchParams(location.search).get('theme')
+        const saved = forced || localStorage.getItem('fk.theme')
+        const dark = saved ? saved === 'dark' : matchMedia('(prefers-color-scheme: dark)').matches
+        document.documentElement.dataset.theme = dark ? 'dark' : 'light'
+        // In its own window (agent/window.cjs) the top bar is the title bar.
+        if (new URLSearchParams(location.search).has('desktop')) document.documentElement.classList.add('desktop')
+      } catch {
+        document.documentElement.dataset.theme = 'light'
+      }
+    </script>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap" rel="stylesheet" />
+    <link rel="stylesheet" href="/style.css" />
+  </head>
+  <body>
+    <div class="frame">
+      <div class="app">
+        <header class="topbar">
+          <div class="brand"><img src="/icons/app.svg" alt="" />feedback-kit</div>
+          <span class="vsep"></span>
+          <div class="machine" id="machine"><span class="dot"></span><span>Ligando…</span></div>
+          <span class="vsep"></span>
+          <button class="btn sm soft" data-action="run-modal" id="run-top"></button>
+          <span class="spacer"></span>
+          <button class="icon-btn" data-action="theme" id="btn-theme"></button>
+          <button class="icon-btn" data-action="search" title="Procurar nas execuções" id="btn-search"></button>
+          <button class="icon-btn" data-action="alerts" title="Alertas" id="btn-bell"></button>
+          <div class="who">
+            <span class="avatar">M</span>
+            <div><b>Matheus</b><span>Agente local</span></div>
+          </div>
+        </header>
+        <nav class="nav" id="nav"></nav>
+        <div id="view"></div>
+      </div>
+    </div>
+
+    <div class="scrim" id="scrim" data-action="close"></div>
+    <aside class="drawer" id="drawer" aria-hidden="true"></aside>
+    <div class="modal" id="modal" role="dialog" aria-modal="true"></div>
+    <div class="toasts" id="toasts"></div>
+
+    <script type="module" src="/app.js"></script>
+  </body>
+</html>
